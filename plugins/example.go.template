@@ -30,7 +30,7 @@ func (p *ExamplePlugin) Execute(cfg *config.Config) error {
 	fmt.Printf("URL: %s\n", cfg.OpenWebUIURL)
 	
 	if cfg.OpenWebUIAPIKey == "" {
-		return fmt.Errorf("OPEN_WEBUI_API_KEY environment variable is required")
+		return logrus.Fatalf("OPEN_WEBUI_API_KEY environment variable is required")
 	}
 	
 	// TODO: Implement your command logic here

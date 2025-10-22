@@ -2,6 +2,10 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.env
+.idea/
+
+memory-bank/
 
 # C extensions
 *.so
@@ -218,3 +222,12 @@ go.work
 go.work.sum
 /owuiback
 /cmd/owuiback/owuiback
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/.gitignore
+/.idea/copilot.data.migration.agent.xml
+/.idea/copilot.data.migration.ask.xml
+/.idea/copilot.data.migration.ask2agent.xml
+/.idea/copilot.data.migration.edit.xml
+/.idea/modules.xml
+/.idea/open-webui-backup.iml
+/.idea/vcs.xml

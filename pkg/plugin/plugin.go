@@ -15,6 +15,13 @@ type Plugin interface {
 	Execute(config *config.Config) error
 }
 
+// FlaggablePlugin is an optional interface for plugins that need custom flags
+type FlaggablePlugin interface {
+	Plugin
+	// SetupFlags allows plugins to add custom flags to their command
+	SetupFlags(cmd *cobra.Command)
+}
+
 // Registry holds all registered plugins
 type Registry struct {
 	plugins []Plugin
@@ -39,11 +46,18 @@ func (r *Registry) GetPlugins() []Plugin {
 
 // CreateCommand creates a cobra command for a plugin
 func CreateCommand(p Plugin, cfg *config.Config) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   p.Name(),
 		Short: p.Description(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return p.Execute(cfg)
 		},
 	}
+
+	// If the plugin implements FlaggablePlugin, let it add custom flags
+	if fp, ok := p.(FlaggablePlugin); ok {
+		fp.SetupFlags(cmd)
+	}
+
+	return cmd
 }

@@ -33,8 +33,6 @@ func (p *RestoreKnowledgePlugin) Execute(cfg *config.Config) error {
 		return fmt.Errorf("OPEN_WEBUI_API_KEY environment variable is required")
 	}
 
-	fmt.Printf("API Key: %s...\n", cfg.OpenWebUIAPIKey[:min(10, len(cfg.OpenWebUIAPIKey))])
-
 	// TODO: Implement actual restore logic
 	fmt.Println("Restore completed successfully!")
 

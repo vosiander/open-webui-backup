@@ -1,0 +1,43 @@
+package plugins
+
+import (
+	"fmt"
+
+	"github.com/vosiander/open-webui-backup/pkg/config"
+)
+
+// ExamplePlugin is a template for creating new plugins
+type ExamplePlugin struct{}
+
+// NewExamplePlugin creates a new ExamplePlugin
+func NewExamplePlugin() *ExamplePlugin {
+	return &ExamplePlugin{}
+}
+
+// Name returns the command name
+func (p *ExamplePlugin) Name() string {
+	return "example-command"
+}
+
+// Description returns the command description
+func (p *ExamplePlugin) Description() string {
+	return "Example command description"
+}
+
+// Execute runs the example command
+func (p *ExamplePlugin) Execute(cfg *config.Config) error {
+	fmt.Printf("Running example command...\n")
+	fmt.Printf("URL: %s\n", cfg.OpenWebUIURL)
+	
+	if cfg.OpenWebUIAPIKey == "" {
+		return fmt.Errorf("OPEN_WEBUI_API_KEY environment variable is required")
+	}
+	
+	// TODO: Implement your command logic here
+	fmt.Println("Command completed successfully!")
+	
+	return nil
+}
+
+// To register this plugin, add it to cmd/owuiback/main.go:
+// registry.Register(plugins.NewExamplePlugin())

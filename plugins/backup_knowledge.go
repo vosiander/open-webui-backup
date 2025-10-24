@@ -10,7 +10,7 @@ import (
 
 // BackupKnowledgePlugin implements the Plugin interface for backing up knowledge
 type BackupKnowledgePlugin struct {
-	outputDir string
+	dir string
 }
 
 // NewBackupKnowledgePlugin creates a new BackupKnowledgePlugin
@@ -30,8 +30,8 @@ func (p *BackupKnowledgePlugin) Description() string {
 
 // SetupFlags adds custom flags to the command
 func (p *BackupKnowledgePlugin) SetupFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&p.outputDir, "output", "o", "", "Output directory for backup files (required)")
-	cmd.MarkFlagRequired("output")
+	cmd.Flags().StringVarP(&p.dir, "dir", "d", "", "Directory for backup/restore files (required)")
+	cmd.MarkFlagRequired("dir")
 }
 
 // Execute runs the backup knowledge command
@@ -44,15 +44,15 @@ func (p *BackupKnowledgePlugin) Execute(cfg *config.Config) error {
 		logrus.Fatalf("OPEN_WEBUI_API_KEY environment variable is required")
 	}
 
-	if p.outputDir == "" {
-		logrus.Fatalf("output directory is required (use --output flag)")
+	if p.dir == "" {
+		logrus.Fatalf("directory is required (use --dir flag)")
 	}
 
 	// Create API client
 	client := openwebui.NewClient(cfg.OpenWebUIURL, cfg.OpenWebUIAPIKey)
 
 	// Perform backup
-	if err := backup.BackupKnowledge(client, p.outputDir); err != nil {
+	if err := backup.BackupKnowledge(client, p.dir); err != nil {
 		logrus.Fatalf("backup failed: %w", err)
 	}
 

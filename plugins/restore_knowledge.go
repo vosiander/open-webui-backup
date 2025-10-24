@@ -10,7 +10,7 @@ import (
 
 // RestoreKnowledgePlugin implements the Plugin interface for restoring knowledge
 type RestoreKnowledgePlugin struct {
-	inputPath string
+	dir       string
 	overwrite bool
 }
 
@@ -31,10 +31,10 @@ func (p *RestoreKnowledgePlugin) Description() string {
 
 // SetupFlags adds custom flags to the command
 func (p *RestoreKnowledgePlugin) SetupFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&p.inputPath, "input", "i", "", "Path to backup ZIP file (required)")
+	cmd.Flags().StringVarP(&p.dir, "dir", "d", "", "Path to backup ZIP file (required)")
 	cmd.Flags().BoolVar(&p.overwrite, "overwrite", false, "Overwrite existing files in the knowledge base")
 
-	if err := cmd.MarkFlagRequired("input"); err != nil {
+	if err := cmd.MarkFlagRequired("dir"); err != nil {
 		logrus.Fatalf("marking required flag failed: %v", err)
 	}
 }
@@ -55,15 +55,15 @@ func (p *RestoreKnowledgePlugin) Execute(cfg *config.Config) error {
 		logrus.Fatal("OPEN_WEBUI_API_KEY environment variable is required")
 	}
 
-	if p.inputPath == "" {
-		logrus.Fatal("input path is required (use --input flag)")
+	if p.dir == "" {
+		logrus.Fatal("directory path is required (use --dir flag)")
 	}
 
 	// Create API client
 	client := openwebui.NewClient(cfg.OpenWebUIURL, cfg.OpenWebUIAPIKey)
 
 	// Perform restore with overwrite flag
-	if err := restore.RestoreKnowledge(client, p.inputPath, p.overwrite); err != nil {
+	if err := restore.RestoreKnowledge(client, p.dir, p.overwrite); err != nil {
 		logrus.Fatalf("restore failed: %v", err)
 	}
 

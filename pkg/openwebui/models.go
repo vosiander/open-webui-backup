@@ -91,3 +91,43 @@ type FileUploadResponse struct {
 type AddFileRequest struct {
 	FileID string `json:"file_id"`
 }
+
+// Model represents a model from the Open WebUI API
+type Model struct {
+	ID            string                 `json:"id"`
+	UserID        string                 `json:"user_id"`
+	BaseModelID   *string                `json:"base_model_id"`
+	Name          string                 `json:"name"`
+	Params        map[string]interface{} `json:"params"`
+	Meta          ModelMeta              `json:"meta"`
+	AccessControl map[string]interface{} `json:"access_control"`
+	IsActive      bool                   `json:"is_active"`
+	UpdatedAt     int64                  `json:"updated_at"`
+	CreatedAt     int64                  `json:"created_at"`
+}
+
+// ModelMeta contains model metadata including knowledge base references
+type ModelMeta struct {
+	ProfileImageURL string                   `json:"profile_image_url,omitempty"`
+	Description     *string                  `json:"description,omitempty"`
+	Capabilities    map[string]interface{}   `json:"capabilities,omitempty"`
+	Knowledge       []map[string]interface{} `json:"knowledge,omitempty"` // Can be files or collections
+	Tags            []string                 `json:"tags,omitempty"`
+}
+
+// KnowledgeItem represents a single knowledge item (file or collection)
+type KnowledgeItem struct {
+	Type string                 `json:"type"` // "file" or "collection"
+	Data map[string]interface{} `json:"-"`    // Raw data for flexibility
+}
+
+// ModelForm for creating/updating models
+type ModelForm struct {
+	ID            string                 `json:"id"`
+	BaseModelID   *string                `json:"base_model_id,omitempty"`
+	Name          string                 `json:"name"`
+	Params        map[string]interface{} `json:"params"`
+	Meta          ModelMeta              `json:"meta"`
+	AccessControl map[string]interface{} `json:"access_control,omitempty"`
+	IsActive      bool                   `json:"is_active"`
+}

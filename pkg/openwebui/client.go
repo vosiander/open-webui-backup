@@ -258,6 +258,88 @@ func (c *Client) RemoveFileFromKnowledge(knowledgeID, fileID string) error {
 	return nil
 }
 
+// ExportModels fetches all models via /api/v1/models/export
+func (c *Client) ExportModels() ([]Model, error) {
+	resp, err := c.doRequest("GET", "/api/v1/models/export", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var models []Model
+	if err := json.NewDecoder(resp.Body).Decode(&models); err != nil {
+		return nil, fmt.Errorf("failed to decode models response: %w", err)
+	}
+
+	return models, nil
+}
+
+// ImportModels posts models to /api/v1/models/import
+func (c *Client) ImportModels(models []Model) error {
+	reqBody := map[string]interface{}{
+		"models": models,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal models: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", "/api/v1/models/import", bytes.NewReader(jsonData))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// GetModelByID fetches a specific model by ID
+func (c *Client) GetModelByID(id string) (*Model, error) {
+	path := fmt.Sprintf("/api/v1/models/?id=%s", id)
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	// API returns array, we need first element
+	var models []Model
+	if err := json.NewDecoder(resp.Body).Decode(&models); err != nil {
+		return nil, fmt.Errorf("failed to decode model response: %w", err)
+	}
+
+	if len(models) == 0 {
+		return nil, fmt.Errorf("model not found: %s", id)
+	}
+
+	return &models[0], nil
+}
+
 // doRequest makes an authenticated HTTP request to the API
 func (c *Client) doRequest(method, path string, body io.Reader) (*http.Response, error) {
 	url := c.baseURL + path

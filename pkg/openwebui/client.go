@@ -26,6 +26,11 @@ func NewClient(baseURL, apiKey string) *Client {
 	}
 }
 
+// GetBaseURL returns the base URL of the client
+func (c *Client) GetBaseURL() string {
+	return c.baseURL
+}
+
 // ListKnowledge fetches all knowledge bases from the API
 func (c *Client) ListKnowledge() ([]KnowledgeBase, error) {
 	resp, err := c.doRequest("GET", "/api/v1/knowledge/list", nil)
@@ -338,6 +343,163 @@ func (c *Client) GetModelByID(id string) (*Model, error) {
 	}
 
 	return &models[0], nil
+}
+
+// ExportTools fetches all tools from /api/v1/tools/export
+func (c *Client) ExportTools() ([]Tool, error) {
+	resp, err := c.doRequest("GET", "/api/v1/tools/export", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var tools []Tool
+	if err := json.NewDecoder(resp.Body).Decode(&tools); err != nil {
+		return nil, fmt.Errorf("failed to decode tools response: %w", err)
+	}
+
+	return tools, nil
+}
+
+// ImportTool creates or imports a tool
+func (c *Client) ImportTool(tool *ToolForm) error {
+	jsonData, err := json.Marshal(tool)
+	if err != nil {
+		return fmt.Errorf("failed to marshal tool form: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", "/api/v1/tools/create", bytes.NewReader(jsonData))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// ListPrompts fetches all prompts from /api/v1/prompts/
+func (c *Client) ListPrompts() ([]Prompt, error) {
+	resp, err := c.doRequest("GET", "/api/v1/prompts/", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var prompts []Prompt
+	if err := json.NewDecoder(resp.Body).Decode(&prompts); err != nil {
+		return nil, fmt.Errorf("failed to decode prompts response: %w", err)
+	}
+
+	return prompts, nil
+}
+
+// CreatePrompt creates a new prompt
+func (c *Client) CreatePrompt(prompt *PromptForm) error {
+	jsonData, err := json.Marshal(prompt)
+	if err != nil {
+		return fmt.Errorf("failed to marshal prompt form: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", "/api/v1/prompts/create", bytes.NewReader(jsonData))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// ListFiles fetches all files (metadata only) from /api/v1/files/
+func (c *Client) ListFiles() ([]FileMetadata, error) {
+	resp, err := c.doRequest("GET", "/api/v1/files/", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var files []FileMetadata
+	if err := json.NewDecoder(resp.Body).Decode(&files); err != nil {
+		return nil, fmt.Errorf("failed to decode files response: %w", err)
+	}
+
+	return files, nil
+}
+
+// GetFileWithContent fetches a file with its full content
+func (c *Client) GetFileWithContent(id string) (*FileExport, error) {
+	path := fmt.Sprintf("/api/v1/files/%s?content=true", id)
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var fileExport FileExport
+	if err := json.NewDecoder(resp.Body).Decode(&fileExport); err != nil {
+		return nil, fmt.Errorf("failed to decode file export response: %w", err)
+	}
+
+	return &fileExport, nil
+}
+
+// CreateFileFromExport uploads a file from export data
+func (c *Client) CreateFileFromExport(file *FileExport) error {
+	// Use the existing UploadFile method to upload the file content
+	var content []byte
+	if file.Data != nil && file.Data.Content != "" {
+		content = []byte(file.Data.Content)
+	}
+
+	_, err := c.UploadFile(file.Filename, content)
+	return err
 }
 
 // doRequest makes an authenticated HTTP request to the API

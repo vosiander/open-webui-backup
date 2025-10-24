@@ -4,6 +4,9 @@ import (
 	"os"
 )
 
+// BackupToolVersion is the current version of the backup tool
+const BackupToolVersion = "0.3.0"
+
 // Config holds the application configuration
 type Config struct {
 	OpenWebUIURL    string

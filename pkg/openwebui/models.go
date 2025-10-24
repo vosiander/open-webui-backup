@@ -131,3 +131,74 @@ type ModelForm struct {
 	AccessControl map[string]interface{} `json:"access_control,omitempty"`
 	IsActive      bool                   `json:"is_active"`
 }
+
+// Tool represents a tool from the Open WebUI API
+type Tool struct {
+	ID            string                 `json:"id"`
+	UserID        string                 `json:"user_id"`
+	Name          string                 `json:"name"`
+	Content       string                 `json:"content"`
+	Meta          ToolMeta               `json:"meta"`
+	AccessControl map[string]interface{} `json:"access_control"`
+	UpdatedAt     int64                  `json:"updated_at"`
+	CreatedAt     int64                  `json:"created_at"`
+}
+
+// ToolMeta contains tool-specific metadata
+type ToolMeta struct {
+	Description string                 `json:"description,omitempty"`
+	Manifest    map[string]interface{} `json:"manifest,omitempty"`
+}
+
+// ToolForm for creating/updating tools
+type ToolForm struct {
+	ID            string                 `json:"id"`
+	Name          string                 `json:"name"`
+	Content       string                 `json:"content"`
+	Meta          ToolMeta               `json:"meta"`
+	AccessControl map[string]interface{} `json:"access_control,omitempty"`
+}
+
+// Prompt represents a prompt from the Open WebUI API
+type Prompt struct {
+	Command       string                 `json:"command"`
+	Title         string                 `json:"title"`
+	Content       string                 `json:"content"`
+	UserID        string                 `json:"user_id,omitempty"`
+	AccessControl map[string]interface{} `json:"access_control,omitempty"`
+	UpdatedAt     int64                  `json:"updated_at,omitempty"`
+	CreatedAt     int64                  `json:"created_at,omitempty"`
+}
+
+// PromptForm for creating/updating prompts
+type PromptForm struct {
+	Command       string                 `json:"command"`
+	Title         string                 `json:"title"`
+	Content       string                 `json:"content"`
+	AccessControl map[string]interface{} `json:"access_control,omitempty"`
+}
+
+// FileExport represents a complete file export with all metadata
+type FileExport struct {
+	ID            string                 `json:"id"`
+	UserID        string                 `json:"user_id"`
+	Filename      string                 `json:"filename"`
+	Meta          FileMeta               `json:"meta"`
+	Data          *FileContent           `json:"data"`
+	Hash          string                 `json:"hash,omitempty"`
+	AccessControl map[string]interface{} `json:"access_control,omitempty"`
+	CreatedAt     int64                  `json:"created_at"`
+	UpdatedAt     int64                  `json:"updated_at"`
+}
+
+// BackupMetadata contains information about the backup
+type BackupMetadata struct {
+	OpenWebUIURL      string   `json:"open_webui_url"`
+	OpenWebUIVersion  string   `json:"open_webui_version,omitempty"`
+	BackupToolVersion string   `json:"backup_tool_version"`
+	BackupTimestamp   string   `json:"backup_timestamp"`
+	BackupType        string   `json:"backup_type"` // "knowledge", "model", "tool", "prompt", "file", "all"
+	ItemCount         int      `json:"item_count"`
+	UnifiedBackup     bool     `json:"unified_backup"`            // true for backup-all
+	ContainedTypes    []string `json:"contained_types,omitempty"` // ["knowledge", "model", "tool", "prompt", "file"]
+}

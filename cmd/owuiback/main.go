@@ -35,6 +35,12 @@ func run() error {
 	registry.Register(plugins.NewRestoreKnowledgePlugin())
 	registry.Register(plugins.NewBackupModelPlugin())
 	registry.Register(plugins.NewRestoreModelPlugin())
+	registry.Register(plugins.NewBackupToolPlugin())
+	registry.Register(plugins.NewRestoreToolPlugin())
+	registry.Register(plugins.NewBackupPromptPlugin())
+	registry.Register(plugins.NewRestorePromptPlugin())
+	registry.Register(plugins.NewBackupFilePlugin())
+	registry.Register(plugins.NewRestoreFilePlugin())
 	registry.Register(plugins.NewBackupAllPlugin())
 	registry.Register(plugins.NewRestoreAllPlugin())
 

@@ -730,11 +730,277 @@ func updateModelKnowledgeReferences(model *openwebui.Model, kbIDMap map[string]s
 	}
 }
 
-// RestoreAll restores all knowledge bases and models from a directory
-// Order: models first (which restore their KBs), then standalone KBs
-// This ensures models get their dependencies first
+// RestoreTool restores a tool from a backup ZIP file
+// If overwrite is true, existing tool with same ID will be replaced
+func RestoreTool(client *openwebui.Client, zipPath string, overwrite bool) error {
+	logrus.Infof("Starting tool restore from: %s", zipPath)
+
+	// Extract tool from ZIP
+	tool, err := extractToolFromZip(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to extract tool from ZIP: %w", err)
+	}
+
+	logrus.Infof("Extracted tool: %s (ID: %s)", tool.Name, tool.ID)
+
+	// Check if tool already exists by attempting to export and checking the list
+	// (There's no direct "get tool by ID" endpoint, so we check the export list)
+	tools, err := client.ExportTools()
+	if err != nil {
+		return fmt.Errorf("failed to check existing tools: %w", err)
+	}
+
+	toolExists := false
+	for _, existingTool := range tools {
+		if existingTool.ID == tool.ID {
+			toolExists = true
+			break
+		}
+	}
+
+	if toolExists && !overwrite {
+		return fmt.Errorf("tool with ID %s already exists (use --overwrite to replace)", tool.ID)
+	}
+
+	// Import the tool (API handles both create and update)
+	logrus.Infof("Importing tool: %s", tool.Name)
+	toolForm := &openwebui.ToolForm{
+		ID:            tool.ID,
+		Name:          tool.Name,
+		Content:       tool.Content,
+		Meta:          tool.Meta,
+		AccessControl: tool.AccessControl,
+	}
+
+	if err := client.ImportTool(toolForm); err != nil {
+		return fmt.Errorf("failed to import tool: %w", err)
+	}
+
+	logrus.Infof("Successfully restored tool: %s", tool.Name)
+	return nil
+}
+
+// extractToolFromZip extracts the tool.json from the ZIP file root
+func extractToolFromZip(zipPath string) (*openwebui.Tool, error) {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open ZIP file: %w", err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if f.Name == "tool.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open tool.json: %w", err)
+			}
+
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read tool.json: %w", err)
+			}
+
+			var tool openwebui.Tool
+			if err := json.Unmarshal(data, &tool); err != nil {
+				return nil, fmt.Errorf("failed to parse tool.json: %w", err)
+			}
+
+			return &tool, nil
+		}
+	}
+
+	return nil, fmt.Errorf("tool.json not found in ZIP file")
+}
+
+// RestorePrompt restores a prompt from a backup ZIP file
+// If overwrite is true, existing prompt with same command will be replaced
+func RestorePrompt(client *openwebui.Client, zipPath string, overwrite bool) error {
+	logrus.Infof("Starting prompt restore from: %s", zipPath)
+
+	// Extract prompt from ZIP
+	prompt, err := extractPromptFromZip(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to extract prompt from ZIP: %w", err)
+	}
+
+	logrus.Infof("Extracted prompt: %s (command: %s)", prompt.Title, prompt.Command)
+
+	// Check if prompt already exists by command
+	prompts, err := client.ListPrompts()
+	if err != nil {
+		return fmt.Errorf("failed to check existing prompts: %w", err)
+	}
+
+	promptExists := false
+	for _, existingPrompt := range prompts {
+		if existingPrompt.Command == prompt.Command {
+			promptExists = true
+			break
+		}
+	}
+
+	if promptExists && !overwrite {
+		return fmt.Errorf("prompt with command '%s' already exists (use --overwrite to replace)", prompt.Command)
+	}
+
+	// Create/update the prompt (API handles both)
+	logrus.Infof("Importing prompt: %s", prompt.Title)
+	promptForm := &openwebui.PromptForm{
+		Command:       prompt.Command,
+		Title:         prompt.Title,
+		Content:       prompt.Content,
+		AccessControl: prompt.AccessControl,
+	}
+
+	if err := client.CreatePrompt(promptForm); err != nil {
+		return fmt.Errorf("failed to import prompt: %w", err)
+	}
+
+	logrus.Infof("Successfully restored prompt: %s", prompt.Title)
+	return nil
+}
+
+// extractPromptFromZip extracts the prompt.json from the ZIP file root
+func extractPromptFromZip(zipPath string) (*openwebui.Prompt, error) {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open ZIP file: %w", err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if f.Name == "prompt.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open prompt.json: %w", err)
+			}
+
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read prompt.json: %w", err)
+			}
+
+			var prompt openwebui.Prompt
+			if err := json.Unmarshal(data, &prompt); err != nil {
+				return nil, fmt.Errorf("failed to parse prompt.json: %w", err)
+			}
+
+			return &prompt, nil
+		}
+	}
+
+	return nil, fmt.Errorf("prompt.json not found in ZIP file")
+}
+
+// RestoreFile restores a file from a backup ZIP file
+// If overwrite is true, existing file with same ID will be replaced
+func RestoreFile(client *openwebui.Client, zipPath string, overwrite bool) error {
+	logrus.Infof("Starting file restore from: %s", zipPath)
+
+	// Extract file from ZIP
+	fileExport, err := extractFileFromZip(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to extract file from ZIP: %w", err)
+	}
+
+	logrus.Infof("Extracted file: %s (ID: %s)", fileExport.Meta.Name, fileExport.ID)
+
+	// Check if file already exists by ID
+	files, err := client.ListFiles()
+	if err != nil {
+		return fmt.Errorf("failed to check existing files: %w", err)
+	}
+
+	fileExists := false
+	for _, existingFile := range files {
+		if existingFile.ID == fileExport.ID {
+			fileExists = true
+			break
+		}
+	}
+
+	if fileExists && !overwrite {
+		return fmt.Errorf("file with ID %s already exists (use --overwrite to replace)", fileExport.ID)
+	}
+
+	// Import the file
+	logrus.Infof("Importing file: %s (%d bytes)", fileExport.Meta.Name, len(fileExport.Data.Content))
+	if err := client.CreateFileFromExport(fileExport); err != nil {
+		return fmt.Errorf("failed to import file: %w", err)
+	}
+
+	logrus.Infof("Successfully restored file: %s", fileExport.Meta.Name)
+	return nil
+}
+
+// extractFileFromZip extracts file.json and content from the ZIP file
+func extractFileFromZip(zipPath string) (*openwebui.FileExport, error) {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open ZIP file: %w", err)
+	}
+	defer r.Close()
+
+	var fileExport *openwebui.FileExport
+	var fileContent []byte
+
+	for _, f := range r.File {
+		// Read file.json
+		if f.Name == "file.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open file.json: %w", err)
+			}
+
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read file.json: %w", err)
+			}
+
+			fileExport = &openwebui.FileExport{}
+			if err := json.Unmarshal(data, fileExport); err != nil {
+				return nil, fmt.Errorf("failed to parse file.json: %w", err)
+			}
+			continue
+		}
+
+		// Read file content from content/ folder
+		if strings.HasPrefix(f.Name, "content/") && !f.FileInfo().IsDir() {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open content file %s: %w", f.Name, err)
+			}
+
+			content, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read content file %s: %w", f.Name, err)
+			}
+
+			fileContent = content
+		}
+	}
+
+	if fileExport == nil {
+		return nil, fmt.Errorf("file.json not found in ZIP file")
+	}
+
+	if fileContent == nil {
+		return nil, fmt.Errorf("file content not found in ZIP file")
+	}
+
+	// Set the content in the export structure (convert []byte to string)
+	fileExport.Data.Content = string(fileContent)
+
+	return fileExport, nil
+}
+
+// RestoreAll restores data from either a unified backup ZIP or legacy separate ZIPs
 func RestoreAll(client *openwebui.Client, inputDir string, overwrite bool) error {
-	logrus.Info("Starting full restore (models + knowledge bases)...")
+	logrus.Info("Starting full restore...")
 
 	// Get all ZIP files in directory
 	files, err := filepath.Glob(filepath.Join(inputDir, "*.zip"))
@@ -747,11 +1013,134 @@ func RestoreAll(client *openwebui.Client, inputDir string, overwrite bool) error
 		return nil
 	}
 
-	logrus.Infof("Found %d ZIP file(s)", len(files))
+	// Check for unified backup
+	var unifiedBackup string
+	for _, file := range files {
+		if isUnifiedBackup(file) {
+			unifiedBackup = file
+			break
+		}
+	}
 
-	// Separate model and knowledge base files
-	var modelFiles []string
-	var kbFiles []string
+	if unifiedBackup != "" {
+		// Restore from unified backup
+		logrus.Infof("Detected unified backup: %s", filepath.Base(unifiedBackup))
+		return restoreFromUnifiedBackup(client, unifiedBackup, overwrite)
+	}
+
+	// Legacy format: separate ZIP files
+	logrus.Info("Using legacy restore mode (separate ZIP files)")
+	return restoreFromLegacyBackups(client, files, overwrite)
+}
+
+// isUnifiedBackup checks if a ZIP file is a unified backup
+func isUnifiedBackup(zipPath string) bool {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return false
+	}
+	defer r.Close()
+
+	// Look for owui.json at root
+	for _, f := range r.File {
+		if f.Name == "owui.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return false
+			}
+			defer rc.Close()
+
+			data, err := io.ReadAll(rc)
+			if err != nil {
+				return false
+			}
+
+			var metadata openwebui.BackupMetadata
+			if err := json.Unmarshal(data, &metadata); err != nil {
+				return false
+			}
+
+			return metadata.UnifiedBackup
+		}
+	}
+
+	return false
+}
+
+// restoreFromUnifiedBackup restores all data from a unified backup ZIP
+func restoreFromUnifiedBackup(client *openwebui.Client, zipPath string, overwrite bool) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to open unified backup: %w", err)
+	}
+	defer r.Close()
+
+	// Read metadata
+	var metadata *openwebui.BackupMetadata
+	for _, f := range r.File {
+		if f.Name == "owui.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return fmt.Errorf("failed to read metadata: %w", err)
+			}
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return fmt.Errorf("failed to read metadata: %w", err)
+			}
+			metadata = &openwebui.BackupMetadata{}
+			if err := json.Unmarshal(data, metadata); err != nil {
+				return fmt.Errorf("failed to parse metadata: %w", err)
+			}
+			break
+		}
+	}
+
+	if metadata == nil {
+		return fmt.Errorf("metadata not found in unified backup")
+	}
+
+	logrus.Infof("Restoring unified backup with %d items", metadata.ItemCount)
+	logrus.Infof("Contained types: %v", metadata.ContainedTypes)
+
+	// Restore each type present in the backup
+	for _, dataType := range metadata.ContainedTypes {
+		switch dataType {
+		case "knowledge":
+			logrus.Info("Restoring knowledge bases from unified backup...")
+			if err := restoreKnowledgeBasesFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some knowledge bases: %v", err)
+			}
+		case "model":
+			logrus.Info("Restoring models from unified backup...")
+			if err := restoreModelsFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some models: %v", err)
+			}
+		case "tool":
+			logrus.Info("Restoring tools from unified backup...")
+			if err := restoreToolsFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some tools: %v", err)
+			}
+		case "prompt":
+			logrus.Info("Restoring prompts from unified backup...")
+			if err := restorePromptsFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some prompts: %v", err)
+			}
+		case "file":
+			logrus.Info("Restoring files from unified backup...")
+			if err := restoreFilesFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some files: %v", err)
+			}
+		}
+	}
+
+	logrus.Info("Unified restore completed successfully")
+	return nil
+}
+
+// restoreFromLegacyBackups restores from legacy separate ZIP files
+func restoreFromLegacyBackups(client *openwebui.Client, files []string, overwrite bool) error {
+	var modelFiles, kbFiles, toolFiles, promptFiles, fileFiles []string
 
 	for _, file := range files {
 		basename := filepath.Base(file)
@@ -759,35 +1148,311 @@ func RestoreAll(client *openwebui.Client, inputDir string, overwrite bool) error
 			modelFiles = append(modelFiles, file)
 		} else if strings.Contains(basename, "_knowledge_base_") {
 			kbFiles = append(kbFiles, file)
+		} else if strings.Contains(basename, "_tool_") {
+			toolFiles = append(toolFiles, file)
+		} else if strings.Contains(basename, "_prompt_") {
+			promptFiles = append(promptFiles, file)
+		} else if strings.Contains(basename, "_file_") {
+			fileFiles = append(fileFiles, file)
 		}
 	}
 
-	logrus.Infof("Found %d model(s) and %d knowledge base(s)", len(modelFiles), len(kbFiles))
+	totalFiles := len(modelFiles) + len(kbFiles) + len(toolFiles) + len(promptFiles) + len(fileFiles)
+	logrus.Infof("Found %d backup file(s) to restore", totalFiles)
 
-	// Step 1: Restore all models (which will restore their embedded KBs)
+	// Restore in order: models, KBs, tools, prompts, files
 	if len(modelFiles) > 0 {
-		logrus.Info("Step 1/2: Restoring models...")
-		for i, modelFile := range modelFiles {
-			logrus.Infof("Restoring model %d/%d: %s", i+1, len(modelFiles), filepath.Base(modelFile))
-			if err := RestoreModel(client, modelFile, overwrite); err != nil {
-				logrus.Warnf("Failed to restore model from %s: %v", filepath.Base(modelFile), err)
-				continue
+		logrus.Infof("Restoring %d model(s)...", len(modelFiles))
+		for i, file := range modelFiles {
+			logrus.Infof("  %d/%d: %s", i+1, len(modelFiles), filepath.Base(file))
+			if err := RestoreModel(client, file, overwrite); err != nil {
+				logrus.Warnf("  Failed: %v", err)
 			}
 		}
 	}
 
-	// Step 2: Restore standalone knowledge bases
 	if len(kbFiles) > 0 {
-		logrus.Info("Step 2/2: Restoring standalone knowledge bases...")
-		for i, kbFile := range kbFiles {
-			logrus.Infof("Restoring knowledge base %d/%d: %s", i+1, len(kbFiles), filepath.Base(kbFile))
-			if err := RestoreKnowledge(client, kbFile, overwrite); err != nil {
-				logrus.Warnf("Failed to restore knowledge base from %s: %v", filepath.Base(kbFile), err)
-				continue
+		logrus.Infof("Restoring %d knowledge base(s)...", len(kbFiles))
+		for i, file := range kbFiles {
+			logrus.Infof("  %d/%d: %s", i+1, len(kbFiles), filepath.Base(file))
+			if err := RestoreKnowledge(client, file, overwrite); err != nil {
+				logrus.Warnf("  Failed: %v", err)
 			}
 		}
 	}
 
-	logrus.Info("Full restore completed successfully")
+	if len(toolFiles) > 0 {
+		logrus.Infof("Restoring %d tool(s)...", len(toolFiles))
+		for i, file := range toolFiles {
+			logrus.Infof("  %d/%d: %s", i+1, len(toolFiles), filepath.Base(file))
+			if err := RestoreTool(client, file, overwrite); err != nil {
+				logrus.Warnf("  Failed: %v", err)
+			}
+		}
+	}
+
+	if len(promptFiles) > 0 {
+		logrus.Infof("Restoring %d prompt(s)...", len(promptFiles))
+		for i, file := range promptFiles {
+			logrus.Infof("  %d/%d: %s", i+1, len(promptFiles), filepath.Base(file))
+			if err := RestorePrompt(client, file, overwrite); err != nil {
+				logrus.Warnf("  Failed: %v", err)
+			}
+		}
+	}
+
+	if len(fileFiles) > 0 {
+		logrus.Infof("Restoring %d file(s)...", len(fileFiles))
+		for i, file := range fileFiles {
+			logrus.Infof("  %d/%d: %s", i+1, len(fileFiles), filepath.Base(file))
+			if err := RestoreFile(client, file, overwrite); err != nil {
+				logrus.Warnf("  Failed: %v", err)
+			}
+		}
+	}
+
+	logrus.Info("Legacy restore completed successfully")
+	return nil
+}
+
+// Helper functions for unified restore (these will extract from the already-open ZIP)
+func restoreKnowledgeBasesFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwrite bool) error {
+	_, err := restoreCollectionKnowledgeItems(r, client, overwrite)
+	return err
+}
+
+func restoreModelsFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwrite bool) error {
+	// Find all model directories
+	modelDirs := make(map[string]bool)
+	for _, f := range r.File {
+		if strings.HasPrefix(f.Name, "models/") {
+			parts := strings.Split(f.Name, "/")
+			if len(parts) >= 2 {
+				modelDirs[parts[1]] = true
+			}
+		}
+	}
+
+	for modelID := range modelDirs {
+		if err := restoreSingleModelFromUnified(r, client, modelID, overwrite); err != nil {
+			logrus.Warnf("  Failed to restore model %s: %v", modelID, err)
+		}
+	}
+	return nil
+}
+
+func restoreSingleModelFromUnified(r *zip.ReadCloser, client *openwebui.Client, modelID string, overwrite bool) error {
+	modelPath := fmt.Sprintf("models/%s/model.json", modelID)
+
+	for _, f := range r.File {
+		if f.Name == modelPath {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return err
+			}
+
+			var model openwebui.Model
+			if err := json.Unmarshal(data, &model); err != nil {
+				return err
+			}
+
+			// Check if exists
+			existing, err := client.GetModelByID(model.ID)
+			if err == nil && existing != nil && !overwrite {
+				logrus.Infof("  Model %s already exists, skipping", model.Name)
+				return nil
+			}
+
+			// Restore embedded KBs and files (they're in the same ZIP)
+			// Import model
+			logrus.Infof("  Restoring model: %s", model.Name)
+			models := []openwebui.Model{model}
+			return client.ImportModels(models)
+		}
+	}
+	return fmt.Errorf("model.json not found for %s", modelID)
+}
+
+func restoreToolsFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwrite bool) error {
+	toolDirs := make(map[string]bool)
+	for _, f := range r.File {
+		if strings.HasPrefix(f.Name, "tools/") {
+			parts := strings.Split(f.Name, "/")
+			if len(parts) >= 2 {
+				toolDirs[parts[1]] = true
+			}
+		}
+	}
+
+	for toolID := range toolDirs {
+		toolPath := fmt.Sprintf("tools/%s/tool.json", toolID)
+		for _, f := range r.File {
+			if f.Name == toolPath {
+				rc, err := f.Open()
+				if err != nil {
+					continue
+				}
+				data, err := io.ReadAll(rc)
+				rc.Close()
+				if err != nil {
+					continue
+				}
+
+				var tool openwebui.Tool
+				if err := json.Unmarshal(data, &tool); err != nil {
+					continue
+				}
+
+				// Check if exists
+				tools, _ := client.ExportTools()
+				exists := false
+				for _, t := range tools {
+					if t.ID == tool.ID {
+						exists = true
+						break
+					}
+				}
+
+				if exists && !overwrite {
+					logrus.Infof("  Tool %s already exists, skipping", tool.Name)
+					continue
+				}
+
+				logrus.Infof("  Restoring tool: %s", tool.Name)
+				toolForm := &openwebui.ToolForm{
+					ID:            tool.ID,
+					Name:          tool.Name,
+					Content:       tool.Content,
+					Meta:          tool.Meta,
+					AccessControl: tool.AccessControl,
+				}
+				client.ImportTool(toolForm)
+			}
+		}
+	}
+	return nil
+}
+
+func restorePromptsFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwrite bool) error {
+	promptDirs := make(map[string]bool)
+	for _, f := range r.File {
+		if strings.HasPrefix(f.Name, "prompts/") {
+			parts := strings.Split(f.Name, "/")
+			if len(parts) >= 2 {
+				promptDirs[parts[1]] = true
+			}
+		}
+	}
+
+	for promptDir := range promptDirs {
+		promptPath := fmt.Sprintf("prompts/%s/prompt.json", promptDir)
+		for _, f := range r.File {
+			if f.Name == promptPath {
+				rc, err := f.Open()
+				if err != nil {
+					continue
+				}
+				data, err := io.ReadAll(rc)
+				rc.Close()
+				if err != nil {
+					continue
+				}
+
+				var prompt openwebui.Prompt
+				if err := json.Unmarshal(data, &prompt); err != nil {
+					continue
+				}
+
+				// Check if exists
+				prompts, _ := client.ListPrompts()
+				exists := false
+				for _, p := range prompts {
+					if p.Command == prompt.Command {
+						exists = true
+						break
+					}
+				}
+
+				if exists && !overwrite {
+					logrus.Infof("  Prompt %s already exists, skipping", prompt.Title)
+					continue
+				}
+
+				logrus.Infof("  Restoring prompt: %s", prompt.Title)
+				promptForm := &openwebui.PromptForm{
+					Command:       prompt.Command,
+					Title:         prompt.Title,
+					Content:       prompt.Content,
+					AccessControl: prompt.AccessControl,
+				}
+				client.CreatePrompt(promptForm)
+			}
+		}
+	}
+	return nil
+}
+
+func restoreFilesFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwrite bool) error {
+	fileDirs := make(map[string]bool)
+	for _, f := range r.File {
+		if strings.HasPrefix(f.Name, "files/") {
+			parts := strings.Split(f.Name, "/")
+			if len(parts) >= 2 {
+				fileDirs[parts[1]] = true
+			}
+		}
+	}
+
+	for fileID := range fileDirs {
+		filePath := fmt.Sprintf("files/%s/file.json", fileID)
+		var fileExport *openwebui.FileExport
+		var fileContent []byte
+
+		for _, f := range r.File {
+			if f.Name == filePath {
+				rc, err := f.Open()
+				if err != nil {
+					continue
+				}
+				data, err := io.ReadAll(rc)
+				rc.Close()
+				if err != nil {
+					continue
+				}
+				fileExport = &openwebui.FileExport{}
+				json.Unmarshal(data, fileExport)
+			} else if strings.HasPrefix(f.Name, fmt.Sprintf("files/%s/content/", fileID)) {
+				rc, _ := f.Open()
+				fileContent, _ = io.ReadAll(rc)
+				rc.Close()
+			}
+		}
+
+		if fileExport != nil && fileContent != nil {
+			// Check if exists
+			files, _ := client.ListFiles()
+			exists := false
+			for _, f := range files {
+				if f.ID == fileExport.ID {
+					exists = true
+					break
+				}
+			}
+
+			if exists && !overwrite {
+				logrus.Infof("  File %s already exists, skipping", fileExport.Meta.Name)
+				continue
+			}
+
+			logrus.Infof("  Restoring file: %s", fileExport.Meta.Name)
+			fileExport.Data.Content = string(fileContent)
+			client.CreateFileFromExport(fileExport)
+		}
+	}
 	return nil
 }

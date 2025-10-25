@@ -1,10 +1,8 @@
 package plugins
 
 import (
-	"bufio"
 	"fmt"
-	"os"
-	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -13,16 +11,19 @@ import (
 )
 
 type PurgePlugin struct {
-	force     bool
-	chats     bool
-	files     bool
-	models    bool
-	knowledge bool
-	prompts   bool
-	tools     bool
-	functions bool
-	memories  bool
-	feedbacks bool
+	force        bool
+	waitDuration time.Duration
+	chats        bool
+	files        bool
+	models       bool
+	knowledge    bool
+	prompts      bool
+	tools        bool
+	functions    bool
+	memories     bool
+	feedbacks    bool
+	groups       bool
+	users        bool
 }
 
 func NewPurgePlugin() *PurgePlugin {
@@ -41,6 +42,7 @@ func (p *PurgePlugin) Description() string {
 
 func (p *PurgePlugin) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&p.force, "force", "f", false, "Actually perform deletion (required)")
+	cmd.Flags().DurationVarP(&p.waitDuration, "wait", "w", 5*time.Second, "Wait duration before performing deletions")
 	cmd.Flags().BoolVar(&p.chats, "chats", false, "Purge only chats")
 	cmd.Flags().BoolVar(&p.files, "files", false, "Purge only files")
 	cmd.Flags().BoolVar(&p.models, "models", false, "Purge only models")
@@ -49,7 +51,9 @@ func (p *PurgePlugin) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&p.tools, "tools", false, "Purge only tools")
 	cmd.Flags().BoolVar(&p.functions, "functions", false, "Purge only functions")
 	cmd.Flags().BoolVar(&p.memories, "memories", false, "Purge only memories")
-	cmd.Flags().BoolVar(&p.feedbacks, "feedbacks", false, "Purge only feedbacks")
+	cmd.Flags().BoolVar(&p.feedbacks, "feedbacks", false, "Purge only feedbacks (purged before users)")
+	cmd.Flags().BoolVar(&p.groups, "groups", false, "Purge only groups (purged before users)")
+	cmd.Flags().BoolVar(&p.users, "users", false, "Purge only users (purged LAST, skips current user)")
 }
 
 // Execute runs the plugin with the given configuration
@@ -63,12 +67,10 @@ func (p *PurgePlugin) Execute(cfg *config.Config) error {
 
 	// Determine what to purge
 	purgeAll := !p.chats && !p.files && !p.models && !p.knowledge &&
-		!p.prompts && !p.tools && !p.functions && !p.memories && !p.feedbacks
+		!p.prompts && !p.tools && !p.functions && !p.memories && !p.feedbacks && !p.groups && !p.users
 
 	// Count items
 	counts := make(map[string]int)
-	var err error
-
 	if purgeAll || p.chats {
 		chats, err := client.GetAllChats()
 		if err != nil {
@@ -141,6 +143,25 @@ func (p *PurgePlugin) Execute(cfg *config.Config) error {
 		}
 	}
 
+	if purgeAll || p.groups {
+		groups, err := client.GetAllGroups()
+		if err != nil {
+			logrus.Warnf("Failed to count groups: %v", err)
+		} else {
+			counts["groups"] = len(groups)
+		}
+	}
+
+	if purgeAll || p.users {
+		users, err := client.GetAllUsers()
+		if err != nil {
+			logrus.Warnf("Failed to count users: %v", err)
+		} else {
+			// Count users, but we'll skip the current user during deletion
+			counts["users"] = len(users)
+		}
+	}
+
 	// Calculate total
 	total := 0
 	for _, count := range counts {
@@ -154,41 +175,31 @@ func (p *PurgePlugin) Execute(cfg *config.Config) error {
 
 	// Display what will be deleted
 	if !p.force {
-		fmt.Println("\n[Dry Run] Would delete the following:")
+		logrus.Info("\n[Dry Run] Would delete the following:")
 		for resource, count := range counts {
 			if count > 0 {
-				fmt.Printf("  - %s: %d items\n", resource, count)
+				logrus.Infof("  - %s: %d items", resource, count)
 			}
 		}
-		fmt.Printf("\nTotal: %d items\n", total)
-		fmt.Println("\nRun with --force to actually delete these items.")
+		logrus.Infof("Total: %d items", total)
+		logrus.Info("Run with --force to actually delete these items.")
 		return nil
 	}
 
 	// Force mode - show warning and ask for confirmation
-	fmt.Println("\n⚠️  WARNING: This will permanently delete the following:")
+	logrus.Warn("⚠️  WARNING: This will permanently delete the following:")
 	for resource, count := range counts {
 		if count > 0 {
-			fmt.Printf("  - %s: %d items\n", resource, count)
+			logrus.Infof("  - %s: %d items", resource, count)
 		}
 	}
-	fmt.Printf("\nTotal: %d items\n", total)
-	fmt.Print("\nAre you sure you want to continue? Type 'yes' to confirm: ")
+	logrus.Infof("Total: %d items", total)
 
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return fmt.Errorf("failed to read confirmation: %w", err)
-	}
-
-	response = strings.TrimSpace(strings.ToLower(response))
-	if response != "yes" {
-		logrus.Info("Operation cancelled")
-		return nil
-	}
+	logrus.Infof("Waiting %s before proceeding...", p.waitDuration)
+	time.Sleep(p.waitDuration)
+	logrus.Info("Proceeding with deletion...")
 
 	// Perform deletions
-	fmt.Println()
 	if err := p.performDeletions(client, counts); err != nil {
 		return err
 	}
@@ -199,7 +210,7 @@ func (p *PurgePlugin) Execute(cfg *config.Config) error {
 
 func (p *PurgePlugin) performDeletions(client *openwebui.Client, counts map[string]int) error {
 	purgeAll := !p.chats && !p.files && !p.models && !p.knowledge &&
-		!p.prompts && !p.tools && !p.functions && !p.memories && !p.feedbacks
+		!p.prompts && !p.tools && !p.functions && !p.memories && !p.feedbacks && !p.groups && !p.users
 
 	// Delete chats
 	if (purgeAll || p.chats) && counts["chats"] > 0 {
@@ -309,13 +320,78 @@ func (p *PurgePlugin) performDeletions(client *openwebui.Client, counts map[stri
 		logrus.Info("✓ Memories deleted")
 	}
 
-	// Delete feedbacks (if supported by API)
-	if purgeAll || p.feedbacks {
-		logrus.Info("Deleting feedbacks...")
-		if err := client.DeleteAllFeedbacks(); err != nil {
-			logrus.Warnf("Failed to delete feedbacks: %v (may not be supported)", err)
+	// Delete feedbacks (before users)
+	if (purgeAll || p.feedbacks) && counts["feedbacks"] > 0 {
+		logrus.Infof("Deleting feedbacks... [%d items]", counts["feedbacks"])
+		feedbacks, err := client.GetAllFeedbacks()
+		if err != nil {
+			logrus.Warnf("Failed to list feedbacks: %v", err)
 		} else {
+			for i, feedback := range feedbacks {
+				if err := client.DeleteFeedbackByID(feedback.ID); err != nil {
+					logrus.Warnf("Failed to delete feedback %s: %v", feedback.ID, err)
+				}
+				if (i+1)%10 == 0 || i == len(feedbacks)-1 {
+					logrus.Infof("  Progress: %d/%d", i+1, len(feedbacks))
+				}
+			}
 			logrus.Info("✓ Feedbacks deleted")
+		}
+	}
+
+	// Delete groups (before users)
+	if (purgeAll || p.groups) && counts["groups"] > 0 {
+		logrus.Infof("Deleting groups... [%d items]", counts["groups"])
+		groups, err := client.GetAllGroups()
+		if err != nil {
+			return fmt.Errorf("failed to list groups: %w", err)
+		}
+		for i, group := range groups {
+			if err := client.DeleteGroupByID(group.ID); err != nil {
+				logrus.Warnf("Failed to delete group %s: %v", group.ID, err)
+			}
+			if (i+1)%10 == 0 || i == len(groups)-1 {
+				logrus.Infof("  Progress: %d/%d", i+1, len(groups))
+			}
+		}
+		logrus.Info("✓ Groups deleted")
+	}
+
+	// Delete users LAST (must be done individually with safety check)
+	if (purgeAll || p.users) && counts["users"] > 0 {
+		logrus.Infof("Deleting users... [%d items]", counts["users"])
+		users, err := client.GetAllUsers()
+		if err != nil {
+			return fmt.Errorf("failed to list users: %w", err)
+		}
+
+		// Get current session's API key for safety check
+		currentAPIKey := client.GetAPIKey()
+
+		deleted := 0
+		skipped := 0
+		for i, user := range users {
+			// Safety check: Don't delete user with same API key as current session
+			if user.APIKey != "" && user.APIKey == currentAPIKey {
+				logrus.Warnf("  ⚠️  Skipping user %s (email: %s) - same API key as current session", user.Name, user.Email)
+				skipped++
+				continue
+			}
+
+			if err := client.DeleteUserByID(user.ID); err != nil {
+				logrus.Warnf("  Failed to delete user %s (ID: %s): %v", user.Email, user.ID, err)
+			} else {
+				deleted++
+			}
+
+			if (i+1)%10 == 0 || i == len(users)-1 {
+				logrus.Infof("  Progress: %d/%d (deleted: %d, skipped: %d)", i+1, len(users), deleted, skipped)
+			}
+		}
+		if skipped > 0 {
+			logrus.Infof("✓ Users deleted (skipped %d for safety)", skipped)
+		} else {
+			logrus.Info("✓ Users deleted")
 		}
 	}
 

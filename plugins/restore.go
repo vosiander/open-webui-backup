@@ -22,6 +22,9 @@ type RestorePlugin struct {
 	models          bool
 	files           bool
 	chats           bool
+	users           bool
+	groups          bool
+	feedbacks       bool
 }
 
 func NewRestorePlugin() *RestorePlugin {
@@ -49,6 +52,9 @@ func (p *RestorePlugin) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&p.models, "models", false, "Restore only models")
 	cmd.Flags().BoolVar(&p.files, "files", false, "Restore only files")
 	cmd.Flags().BoolVar(&p.chats, "chats", false, "Restore only chats")
+	cmd.Flags().BoolVar(&p.users, "users", false, "Restore only users (restored FIRST, passwords are randomly generated)")
+	cmd.Flags().BoolVar(&p.groups, "groups", false, "Restore only groups (restored after users)")
+	cmd.Flags().BoolVar(&p.feedbacks, "feedbacks", false, "Restore only feedbacks (restored LAST)")
 }
 
 // Execute runs the plugin with the given configuration
@@ -101,10 +107,13 @@ func (p *RestorePlugin) Execute(cfg *config.Config) error {
 		Models:    p.models,
 		Files:     p.files,
 		Chats:     p.chats,
+		Users:     p.users,
+		Groups:    p.groups,
+		Feedbacks: p.feedbacks,
 	}
 
 	// If no specific types are selected, restore everything
-	if !options.Prompts && !options.Tools && !options.Knowledge && !options.Models && !options.Files && !options.Chats {
+	if !options.Prompts && !options.Tools && !options.Knowledge && !options.Models && !options.Files && !options.Chats && !options.Users && !options.Groups && !options.Feedbacks {
 		logrus.Info("No specific types selected, restoring all data from backup")
 		options.Prompts = true
 		options.Tools = true
@@ -112,6 +121,9 @@ func (p *RestorePlugin) Execute(cfg *config.Config) error {
 		options.Models = true
 		options.Files = true
 		options.Chats = true
+		options.Users = true
+		options.Groups = true
+		options.Feedbacks = true
 	}
 
 	// Perform the restore

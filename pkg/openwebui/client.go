@@ -674,6 +674,10 @@ func (c *Client) DeleteKnowledgeByID(id string) error {
 
 // DeletePromptByCommand deletes a specific prompt by command
 func (c *Client) DeletePromptByCommand(command string) error {
+	if command != "" && strings.HasPrefix(command, "/") {
+		command = command[1:]
+	}
+
 	path := fmt.Sprintf("/api/v1/prompts/command/%s/delete", command)
 	resp, err := c.doRequest("DELETE", path, nil)
 	if err != nil {
@@ -846,6 +850,316 @@ func (c *Client) DeleteAllMemories() error {
 // DeleteAllFeedbacks deletes all feedbacks
 func (c *Client) DeleteAllFeedbacks() error {
 	resp, err := c.doRequest("DELETE", "/api/v1/evaluations/feedbacks/all", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// GetAllUsers fetches all users from /api/v1/users/ with pagination support
+func (c *Client) GetAllUsers() ([]User, error) {
+	var allUsers []User
+	page := 1
+
+	for {
+		path := fmt.Sprintf("/api/v1/users/?page=%d", page)
+		resp, err := c.doRequest("GET", path, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, &APIError{
+				StatusCode: resp.StatusCode,
+				Message:    string(body),
+			}
+		}
+
+		var response UserListResponse
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("failed to decode users response: %w", err)
+		}
+		resp.Body.Close()
+
+		// If no users returned, we've reached the end
+		if len(response.Users) == 0 {
+			break
+		}
+
+		allUsers = append(allUsers, response.Users...)
+
+		// Check if we've fetched all users
+		if len(allUsers) >= response.Total {
+			break
+		}
+
+		page++
+	}
+
+	return allUsers, nil
+}
+
+// ImportUser creates a new user via /api/v1/auths/add
+func (c *Client) ImportUser(userForm *UserForm) error {
+	jsonData, err := json.Marshal(userForm)
+	if err != nil {
+		return fmt.Errorf("failed to marshal user form: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", "/api/v1/auths/add", bytes.NewReader(jsonData))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// DeleteUserByID deletes a specific user by ID
+func (c *Client) DeleteUserByID(userID string) error {
+	path := fmt.Sprintf("/api/v1/users/%s", userID)
+	resp, err := c.doRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// GetAPIKey returns the API key being used by the client
+func (c *Client) GetAPIKey() string {
+	return c.apiKey
+}
+
+// GetAllGroups fetches all groups from /api/v1/groups/
+func (c *Client) GetAllGroups() ([]Group, error) {
+	resp, err := c.doRequest("GET", "/api/v1/groups/", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var groups []Group
+	if err := json.NewDecoder(resp.Body).Decode(&groups); err != nil {
+		return nil, fmt.Errorf("failed to decode groups response: %w", err)
+	}
+
+	return groups, nil
+}
+
+// CreateGroup creates a new group via /api/v1/groups/create
+func (c *Client) CreateGroup(groupForm *GroupForm) (*Group, error) {
+	jsonData, err := json.Marshal(groupForm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal group form: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", "/api/v1/groups/create", bytes.NewReader(jsonData))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var group Group
+	if err := json.NewDecoder(resp.Body).Decode(&group); err != nil {
+		return nil, fmt.Errorf("failed to decode group response: %w", err)
+	}
+
+	return &group, nil
+}
+
+// GetGroupByID fetches a specific group by ID
+func (c *Client) GetGroupByID(id string) (*Group, error) {
+	path := fmt.Sprintf("/api/v1/groups/id/%s", id)
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var group Group
+	if err := json.NewDecoder(resp.Body).Decode(&group); err != nil {
+		return nil, fmt.Errorf("failed to decode group response: %w", err)
+	}
+
+	return &group, nil
+}
+
+// DeleteGroupByID deletes a specific group by ID
+func (c *Client) DeleteGroupByID(id string) error {
+	path := fmt.Sprintf("/api/v1/groups/id/%s/delete", id)
+	resp, err := c.doRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// DeleteAllGroups deletes all groups
+func (c *Client) DeleteAllGroups() error {
+	resp, err := c.doRequest("DELETE", "/api/v1/groups/all", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// GetAllFeedbacks fetches all feedbacks from /api/v1/evaluations/feedbacks/all/export
+func (c *Client) GetAllFeedbacks() ([]Feedback, error) {
+	resp, err := c.doRequest("GET", "/api/v1/evaluations/feedbacks/all/export", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var feedbacks []Feedback
+	if err := json.NewDecoder(resp.Body).Decode(&feedbacks); err != nil {
+		return nil, fmt.Errorf("failed to decode feedbacks response: %w", err)
+	}
+
+	return feedbacks, nil
+}
+
+// CreateFeedback creates a new feedback
+func (c *Client) CreateFeedback(feedbackForm *FeedbackForm) (*Feedback, error) {
+	jsonData, err := json.Marshal(feedbackForm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal feedback form: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", "/api/v1/evaluations/feedback", bytes.NewReader(jsonData))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var feedback Feedback
+	if err := json.NewDecoder(resp.Body).Decode(&feedback); err != nil {
+		return nil, fmt.Errorf("failed to decode feedback response: %w", err)
+	}
+
+	return &feedback, nil
+}
+
+// GetFeedbackByID fetches a specific feedback by ID
+func (c *Client) GetFeedbackByID(id string) (*Feedback, error) {
+	path := fmt.Sprintf("/api/v1/evaluations/feedback/%s", id)
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var feedback Feedback
+	if err := json.NewDecoder(resp.Body).Decode(&feedback); err != nil {
+		return nil, fmt.Errorf("failed to decode feedback response: %w", err)
+	}
+
+	return &feedback, nil
+}
+
+// DeleteFeedbackByID deletes a specific feedback by ID
+func (c *Client) DeleteFeedbackByID(id string) error {
+	path := fmt.Sprintf("/api/v1/evaluations/feedback/%s", id)
+	resp, err := c.doRequest("DELETE", path, nil)
 	if err != nil {
 		return err
 	}

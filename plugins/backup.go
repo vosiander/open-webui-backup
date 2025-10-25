@@ -21,6 +21,9 @@ type BackupPlugin struct {
 	models           bool
 	files            bool
 	chats            bool
+	users            bool
+	groups           bool
+	feedbacks        bool
 }
 
 func NewBackupPlugin() *BackupPlugin {
@@ -47,6 +50,9 @@ func (p *BackupPlugin) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&p.models, "models", false, "Include only models in backup")
 	cmd.Flags().BoolVar(&p.files, "files", false, "Include only files in backup")
 	cmd.Flags().BoolVar(&p.chats, "chats", false, "Include only chats in backup")
+	cmd.Flags().BoolVar(&p.groups, "groups", false, "Include only groups in backup (backed up before users)")
+	cmd.Flags().BoolVar(&p.feedbacks, "feedbacks", false, "Include only feedbacks in backup (backed up before users)")
+	cmd.Flags().BoolVar(&p.users, "users", false, "Include only users in backup (backed up LAST)")
 }
 
 // Execute runs the plugin with the given configuration
@@ -74,7 +80,7 @@ func (p *BackupPlugin) Execute(cfg *config.Config) error {
 	options := &backup.SelectiveBackupOptions{}
 
 	// Check if any specific flags were provided
-	anyFlagProvided := p.prompts || p.tools || p.knowledge || p.models || p.files || p.chats
+	anyFlagProvided := p.prompts || p.tools || p.knowledge || p.models || p.files || p.chats || p.users || p.groups || p.feedbacks
 
 	if anyFlagProvided {
 		// Selective backup based on flags
@@ -84,6 +90,9 @@ func (p *BackupPlugin) Execute(cfg *config.Config) error {
 		options.Models = p.models
 		options.Files = p.files
 		options.Chats = p.chats
+		options.Users = p.users
+		options.Groups = p.groups
+		options.Feedbacks = p.feedbacks
 	} else {
 		// Default: backup everything
 		options.Prompts = true
@@ -92,6 +101,9 @@ func (p *BackupPlugin) Execute(cfg *config.Config) error {
 		options.Models = true
 		options.Files = true
 		options.Chats = true
+		options.Users = true
+		options.Groups = true
+		options.Feedbacks = true
 	}
 
 	// Prepare file paths for encryption

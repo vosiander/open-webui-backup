@@ -248,6 +248,82 @@ type Memory struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
+// User represents a user from the Open WebUI API
+type User struct {
+	ID              string                 `json:"id"`
+	Name            string                 `json:"name"`
+	Email           string                 `json:"email"`
+	Username        string                 `json:"username,omitempty"`
+	Role            string                 `json:"role"`
+	ProfileImageURL string                 `json:"profile_image_url,omitempty"`
+	Bio             string                 `json:"bio,omitempty"`
+	Gender          string                 `json:"gender,omitempty"`
+	DateOfBirth     string                 `json:"date_of_birth,omitempty"`
+	Info            map[string]interface{} `json:"info,omitempty"`
+	Settings        map[string]interface{} `json:"settings,omitempty"`
+	APIKey          string                 `json:"api_key,omitempty"`
+	OAuthSub        string                 `json:"oauth_sub,omitempty"`
+	LastActiveAt    int64                  `json:"last_active_at,omitempty"`
+	UpdatedAt       int64                  `json:"updated_at,omitempty"`
+	CreatedAt       int64                  `json:"created_at,omitempty"`
+}
+
+// UserForm for creating/updating users
+type UserForm struct {
+	Name            string `json:"name"`
+	Email           string `json:"email"`
+	Password        string `json:"password"`
+	Role            string `json:"role"`
+	ProfileImageURL string `json:"profile_image_url"`
+}
+
+// UserListResponse represents the paginated response from the users endpoint
+type UserListResponse struct {
+	Users []User `json:"users"`
+	Total int    `json:"total"`
+}
+
+// Group represents a group from the Open WebUI API
+type Group struct {
+	ID          string                 `json:"id"`
+	UserID      string                 `json:"user_id"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	UserIDs     []string               `json:"user_ids"`
+	AdminIDs    []string               `json:"admin_ids,omitempty"`
+	Permissions map[string]interface{} `json:"permissions,omitempty"`
+	Meta        map[string]interface{} `json:"meta,omitempty"`
+	CreatedAt   int64                  `json:"created_at"`
+	UpdatedAt   int64                  `json:"updated_at"`
+}
+
+// GroupForm for creating/updating groups
+type GroupForm struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	UserIDs     []string `json:"user_ids,omitempty"`
+}
+
+// Feedback represents a feedback/evaluation from the Open WebUI API
+type Feedback struct {
+	ID        string                 `json:"id"`
+	UserID    string                 `json:"user_id"`
+	Type      string                 `json:"type,omitempty"`
+	Data      map[string]interface{} `json:"data"`
+	Meta      map[string]interface{} `json:"meta,omitempty"`
+	Snapshot  map[string]interface{} `json:"snapshot,omitempty"`
+	CreatedAt int64                  `json:"created_at"`
+	UpdatedAt int64                  `json:"updated_at"`
+}
+
+// FeedbackForm for creating/updating feedbacks
+type FeedbackForm struct {
+	Type     string                 `json:"type,omitempty"`
+	Data     map[string]interface{} `json:"data"`
+	Meta     map[string]interface{} `json:"meta,omitempty"`
+	Snapshot map[string]interface{} `json:"snapshot,omitempty"`
+}
+
 // BackupMetadata contains information about the backup
 type BackupMetadata struct {
 	OpenWebUIURL      string   `json:"open_webui_url"`
@@ -257,5 +333,5 @@ type BackupMetadata struct {
 	BackupType        string   `json:"backup_type"` // "knowledge", "model", "tool", "prompt", "file", "chat", "all"
 	ItemCount         int      `json:"item_count"`
 	UnifiedBackup     bool     `json:"unified_backup"`            // true for backup-all
-	ContainedTypes    []string `json:"contained_types,omitempty"` // ["knowledge", "model", "tool", "prompt", "file", "chat"]
+	ContainedTypes    []string `json:"contained_types,omitempty"` // ["knowledge", "model", "tool", "prompt", "file", "chat", "user"]
 }

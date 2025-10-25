@@ -2,6 +2,8 @@ package restore
 
 import (
 	"archive/zip"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +22,119 @@ type SelectiveRestoreOptions struct {
 	Prompts   bool
 	Files     bool
 	Chats     bool
+	Users     bool
+	Groups    bool
+	Feedbacks bool
+}
+
+// generateRandomPassword creates a cryptographically secure random password
+func generateRandomPassword(length int) (string, error) {
+	if length < 12 {
+		length = 12
+	}
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to generate random password: %w", err)
+	}
+	// Use base64 encoding to ensure readable characters
+	password := base64.URLEncoding.EncodeToString(bytes)
+	// Trim to desired length
+	if len(password) > length {
+		password = password[:length]
+	}
+	return password, nil
+}
+
+// RestoreUser restores a user from a backup ZIP file
+// Since passwords are not in the backup, a random password is generated
+// If overwrite is true, existing user with same ID will be replaced
+func RestoreUser(client *openwebui.Client, zipPath string, overwrite bool) error {
+	logrus.Infof("Starting user restore from: %s", zipPath)
+
+	// Extract user from ZIP
+	user, err := extractUserFromZip(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to extract user from ZIP: %w", err)
+	}
+
+	logrus.Infof("Extracted user: %s (email: %s)", user.Name, user.Email)
+
+	// Check if user already exists by email
+	users, err := client.GetAllUsers()
+	if err != nil {
+		return fmt.Errorf("failed to check existing users: %w", err)
+	}
+
+	userExists := false
+	for _, existingUser := range users {
+		if existingUser.Email == user.Email {
+			userExists = true
+			break
+		}
+	}
+
+	if userExists && !overwrite {
+		return fmt.Errorf("user with email %s already exists (use --overwrite to replace)", user.Email)
+	}
+
+	// Generate random password (original password is not in backup)
+	password, err := generateRandomPassword(16)
+	if err != nil {
+		return fmt.Errorf("failed to generate password: %w", err)
+	}
+
+	// Import the user
+	logrus.Infof("Importing user: %s", user.Name)
+	logrus.Warnf("Generated random password for user %s - user must reset password", user.Email)
+
+	userForm := &openwebui.UserForm{
+		Name:            user.Name,
+		Email:           user.Email,
+		Password:        password,
+		Role:            user.Role,
+		ProfileImageURL: user.ProfileImageURL,
+	}
+
+	if err := client.ImportUser(userForm); err != nil {
+		return fmt.Errorf("failed to import user: %w", err)
+	}
+
+	logrus.Infof("Successfully restored user: %s (email: %s)", user.Name, user.Email)
+	logrus.Infof("⚠️  User %s requires password reset", user.Email)
+	return nil
+}
+
+// extractUserFromZip extracts the user.json from the ZIP file root
+func extractUserFromZip(zipPath string) (*openwebui.User, error) {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open ZIP file: %w", err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if f.Name == "user.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open user.json: %w", err)
+			}
+
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read user.json: %w", err)
+			}
+
+			var user openwebui.User
+			if err := json.Unmarshal(data, &user); err != nil {
+				return nil, fmt.Errorf("failed to parse user.json: %w", err)
+			}
+
+			return &user, nil
+		}
+	}
+
+	return nil, fmt.Errorf("user.json not found in ZIP file")
 }
 
 // RestoreKnowledge restores a knowledge base from a backup ZIP file
@@ -1075,7 +1190,7 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	logrus.Info("Starting selective restore...")
 
 	// Validate that at least one option is enabled
-	if !options.Knowledge && !options.Models && !options.Tools && !options.Prompts && !options.Files && !options.Chats {
+	if !options.Knowledge && !options.Models && !options.Tools && !options.Prompts && !options.Files && !options.Chats && !options.Users && !options.Groups && !options.Feedbacks {
 		return fmt.Errorf("at least one data type must be selected for restore")
 	}
 
@@ -1118,7 +1233,18 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	logrus.Infof("Restoring from unified backup with %d items", metadata.ItemCount)
 	logrus.Infof("Available types: %v", metadata.ContainedTypes)
 
-	// Restore selected types
+	// Restore selected types - USERS MUST BE RESTORED FIRST
+	if options.Users {
+		if contains(metadata.ContainedTypes, "user") {
+			logrus.Info("Restoring users...")
+			if err := restoreUsersFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some users: %v", err)
+			}
+		} else {
+			logrus.Info("Users not present in backup, skipping")
+		}
+	}
+
 	if options.Knowledge {
 		if contains(metadata.ContainedTypes, "knowledge") {
 			logrus.Info("Restoring knowledge bases...")
@@ -1182,6 +1308,28 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 			}
 		} else {
 			logrus.Info("Chats not present in backup, skipping")
+		}
+	}
+
+	if options.Groups {
+		if contains(metadata.ContainedTypes, "group") {
+			logrus.Info("Restoring groups...")
+			if err := restoreGroupsFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some groups: %v", err)
+			}
+		} else {
+			logrus.Info("Groups not present in backup, skipping")
+		}
+	}
+
+	if options.Feedbacks {
+		if contains(metadata.ContainedTypes, "feedback") {
+			logrus.Info("Restoring feedbacks...")
+			if err := restoreFeedbacksFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some feedbacks: %v", err)
+			}
+		} else {
+			logrus.Info("Feedbacks not present in backup, skipping")
 		}
 	}
 
@@ -1304,9 +1452,29 @@ func restoreFromUnifiedBackup(client *openwebui.Client, zipPath string, overwrit
 	logrus.Infof("Restoring unified backup with %d items", metadata.ItemCount)
 	logrus.Infof("Contained types: %v", metadata.ContainedTypes)
 
-	// Restore each type present in the backup
+	// Restore each type present in the backup - USERS MUST BE RESTORED FIRST
+	// First, restore users if present
+	if contains(metadata.ContainedTypes, "user") {
+		logrus.Info("Restoring users from unified backup...")
+		if err := restoreUsersFromUnified(r, client, overwrite); err != nil {
+			logrus.Warnf("Failed to restore some users: %v", err)
+		}
+	}
+
+	// Then restore groups (after users, since groups reference users)
+	if contains(metadata.ContainedTypes, "group") {
+		logrus.Info("Restoring groups from unified backup...")
+		if err := restoreGroupsFromUnified(r, client, overwrite); err != nil {
+			logrus.Warnf("Failed to restore some groups: %v", err)
+		}
+	}
+
+	// Then restore other types
 	for _, dataType := range metadata.ContainedTypes {
 		switch dataType {
+		case "user", "group", "feedback":
+			// Already restored or will be restored at the end
+			continue
 		case "knowledge":
 			logrus.Info("Restoring knowledge bases from unified backup...")
 			if err := restoreKnowledgeBasesFromUnified(r, client, overwrite); err != nil {
@@ -1337,6 +1505,14 @@ func restoreFromUnifiedBackup(client *openwebui.Client, zipPath string, overwrit
 			if err := restoreChatsFromUnified(r, client, overwrite); err != nil {
 				logrus.Warnf("Failed to restore some chats: %v", err)
 			}
+		}
+	}
+
+	// Finally, restore feedbacks at the end
+	if contains(metadata.ContainedTypes, "feedback") {
+		logrus.Info("Restoring feedbacks from unified backup...")
+		if err := restoreFeedbacksFromUnified(r, client, overwrite); err != nil {
+			logrus.Warnf("Failed to restore some feedbacks: %v", err)
 		}
 	}
 
@@ -1715,6 +1891,331 @@ func restoreChatsFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwr
 				logrus.Infof("  Restoring chat: %s", chat.Title)
 				if err := client.ImportChat(&chat); err != nil {
 					logrus.Warnf("  Failed to restore chat %s: %v", chat.Title, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func restoreUsersFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwrite bool) error {
+	userDirs := make(map[string]bool)
+	for _, f := range r.File {
+		if strings.HasPrefix(f.Name, "users/") {
+			parts := strings.Split(f.Name, "/")
+			if len(parts) >= 2 {
+				userDirs[parts[1]] = true
+			}
+		}
+	}
+
+	for userID := range userDirs {
+		userPath := fmt.Sprintf("users/%s/user.json", userID)
+		for _, f := range r.File {
+			if f.Name == userPath {
+				rc, err := f.Open()
+				if err != nil {
+					continue
+				}
+				data, err := io.ReadAll(rc)
+				rc.Close()
+				if err != nil {
+					continue
+				}
+
+				var user openwebui.User
+				if err := json.Unmarshal(data, &user); err != nil {
+					continue
+				}
+
+				// Check if user already exists by email
+				users, err := client.GetAllUsers()
+				if err != nil {
+					logrus.Warnf("  Failed to check existing users: %v", err)
+					continue
+				}
+
+				exists := false
+				for _, existingUser := range users {
+					if existingUser.Email == user.Email {
+						exists = true
+						break
+					}
+				}
+
+				if exists && !overwrite {
+					logrus.Infof("  User %s already exists, skipping", user.Email)
+					continue
+				}
+
+				// Generate random password (original password is not in backup)
+				password, err := generateRandomPassword(16)
+				if err != nil {
+					logrus.Warnf("  Failed to generate password for user %s: %v", user.Email, err)
+					continue
+				}
+
+				logrus.Infof("  Restoring user: %s (email: %s)", user.Name, user.Email)
+				logrus.Warnf("  Generated random password for user %s - user must reset password", user.Email)
+
+				userForm := &openwebui.UserForm{
+					Name:            user.Name,
+					Email:           user.Email,
+					Password:        password,
+					Role:            user.Role,
+					ProfileImageURL: user.ProfileImageURL,
+				}
+
+				if err := client.ImportUser(userForm); err != nil {
+					logrus.Warnf("  Failed to restore user %s: %v", user.Email, err)
+				} else {
+					logrus.Infof("  ⚠️  User %s requires password reset", user.Email)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// RestoreGroup restores a group from a backup ZIP file
+// If overwrite is true, existing group with same ID will be replaced
+func RestoreGroup(client *openwebui.Client, zipPath string, overwrite bool) error {
+	logrus.Infof("Starting group restore from: %s", zipPath)
+
+	// Extract group from ZIP
+	group, err := extractGroupFromZip(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to extract group from ZIP: %w", err)
+	}
+
+	logrus.Infof("Extracted group: %s (ID: %s)", group.Name, group.ID)
+
+	// Check if group already exists by ID
+	existingGroup, err := client.GetGroupByID(group.ID)
+	if err == nil && existingGroup != nil && !overwrite {
+		return fmt.Errorf("group with ID %s already exists (use --overwrite to replace)", group.ID)
+	}
+
+	// Create the group
+	logrus.Infof("Importing group: %s", group.Name)
+	groupForm := &openwebui.GroupForm{
+		Name:        group.Name,
+		Description: group.Description,
+		UserIDs:     group.UserIDs,
+	}
+
+	if _, err := client.CreateGroup(groupForm); err != nil {
+		return fmt.Errorf("failed to import group: %w", err)
+	}
+
+	logrus.Infof("Successfully restored group: %s", group.Name)
+	return nil
+}
+
+// extractGroupFromZip extracts the group.json from the ZIP file root
+func extractGroupFromZip(zipPath string) (*openwebui.Group, error) {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open ZIP file: %w", err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if f.Name == "group.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open group.json: %w", err)
+			}
+
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read group.json: %w", err)
+			}
+
+			var group openwebui.Group
+			if err := json.Unmarshal(data, &group); err != nil {
+				return nil, fmt.Errorf("failed to parse group.json: %w", err)
+			}
+
+			return &group, nil
+		}
+	}
+
+	return nil, fmt.Errorf("group.json not found in ZIP file")
+}
+
+// restoreGroupsFromUnified restores groups from a unified backup
+func restoreGroupsFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwrite bool) error {
+	groupDirs := make(map[string]bool)
+	for _, f := range r.File {
+		if strings.HasPrefix(f.Name, "groups/") {
+			parts := strings.Split(f.Name, "/")
+			if len(parts) >= 2 {
+				groupDirs[parts[1]] = true
+			}
+		}
+	}
+
+	for groupID := range groupDirs {
+		groupPath := fmt.Sprintf("groups/%s/group.json", groupID)
+		for _, f := range r.File {
+			if f.Name == groupPath {
+				rc, err := f.Open()
+				if err != nil {
+					continue
+				}
+				data, err := io.ReadAll(rc)
+				rc.Close()
+				if err != nil {
+					continue
+				}
+
+				var group openwebui.Group
+				if err := json.Unmarshal(data, &group); err != nil {
+					continue
+				}
+
+				// Check if group already exists by ID
+				existingGroup, err := client.GetGroupByID(group.ID)
+				if err == nil && existingGroup != nil && !overwrite {
+					logrus.Infof("  Group %s already exists, skipping", group.Name)
+					continue
+				}
+
+				logrus.Infof("  Restoring group: %s", group.Name)
+				groupForm := &openwebui.GroupForm{
+					Name:        group.Name,
+					Description: group.Description,
+					UserIDs:     group.UserIDs,
+				}
+
+				if _, err := client.CreateGroup(groupForm); err != nil {
+					logrus.Warnf("  Failed to restore group %s: %v", group.Name, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// RestoreFeedback restores a feedback from a backup ZIP file
+// If overwrite is true, existing feedback with same ID will be replaced
+func RestoreFeedback(client *openwebui.Client, zipPath string, overwrite bool) error {
+	logrus.Infof("Starting feedback restore from: %s", zipPath)
+
+	// Extract feedback from ZIP
+	feedback, err := extractFeedbackFromZip(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to extract feedback from ZIP: %w", err)
+	}
+
+	logrus.Infof("Extracted feedback: ID %s", feedback.ID)
+
+	// Check if feedback already exists by ID
+	existingFeedback, err := client.GetFeedbackByID(feedback.ID)
+	if err == nil && existingFeedback != nil && !overwrite {
+		return fmt.Errorf("feedback with ID %s already exists (use --overwrite to replace)", feedback.ID)
+	}
+
+	// Create the feedback
+	logrus.Infof("Importing feedback: %s", feedback.ID)
+	feedbackForm := &openwebui.FeedbackForm{
+		Type:     feedback.Type,
+		Data:     feedback.Data,
+		Meta:     feedback.Meta,
+		Snapshot: feedback.Snapshot,
+	}
+
+	if _, err := client.CreateFeedback(feedbackForm); err != nil {
+		return fmt.Errorf("failed to import feedback: %w", err)
+	}
+
+	logrus.Infof("Successfully restored feedback: %s", feedback.ID)
+	return nil
+}
+
+// extractFeedbackFromZip extracts the feedback.json from the ZIP file root
+func extractFeedbackFromZip(zipPath string) (*openwebui.Feedback, error) {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open ZIP file: %w", err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if f.Name == "feedback.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open feedback.json: %w", err)
+			}
+
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read feedback.json: %w", err)
+			}
+
+			var feedback openwebui.Feedback
+			if err := json.Unmarshal(data, &feedback); err != nil {
+				return nil, fmt.Errorf("failed to parse feedback.json: %w", err)
+			}
+
+			return &feedback, nil
+		}
+	}
+
+	return nil, fmt.Errorf("feedback.json not found in ZIP file")
+}
+
+// restoreFeedbacksFromUnified restores feedbacks from a unified backup
+func restoreFeedbacksFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwrite bool) error {
+	feedbackDirs := make(map[string]bool)
+	for _, f := range r.File {
+		if strings.HasPrefix(f.Name, "feedbacks/") {
+			parts := strings.Split(f.Name, "/")
+			if len(parts) >= 2 {
+				feedbackDirs[parts[1]] = true
+			}
+		}
+	}
+
+	for feedbackID := range feedbackDirs {
+		feedbackPath := fmt.Sprintf("feedbacks/%s/feedback.json", feedbackID)
+		for _, f := range r.File {
+			if f.Name == feedbackPath {
+				rc, err := f.Open()
+				if err != nil {
+					continue
+				}
+				data, err := io.ReadAll(rc)
+				rc.Close()
+				if err != nil {
+					continue
+				}
+
+				var feedback openwebui.Feedback
+				if err := json.Unmarshal(data, &feedback); err != nil {
+					continue
+				}
+
+				// Check if feedback already exists by ID
+				existingFeedback, err := client.GetFeedbackByID(feedback.ID)
+				if err == nil && existingFeedback != nil && !overwrite {
+					logrus.Infof("  Feedback %s already exists, skipping", feedback.ID)
+					continue
+				}
+
+				logrus.Infof("  Restoring feedback: %s", feedback.ID)
+				feedbackForm := &openwebui.FeedbackForm{
+					Type:     feedback.Type,
+					Data:     feedback.Data,
+					Meta:     feedback.Meta,
+					Snapshot: feedback.Snapshot,
+				}
+
+				if _, err := client.CreateFeedback(feedbackForm); err != nil {
+					logrus.Warnf("  Failed to restore feedback %s: %v", feedback.ID, err)
 				}
 			}
 		}

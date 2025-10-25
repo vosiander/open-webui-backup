@@ -23,6 +23,9 @@ type SelectiveBackupOptions struct {
 	Prompts   bool
 	Files     bool
 	Chats     bool
+	Groups    bool
+	Feedbacks bool
+	Users     bool
 }
 
 // BackupKnowledge is the main entry point for backing up all knowledge bases
@@ -919,6 +922,46 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 		}
 	}
 
+	if options.Groups {
+		logrus.Info("Backing up groups...")
+		groupCount, err := backupAllGroups(zipWriter, client)
+		if err != nil {
+			logrus.Warnf("Failed to backup some groups: %v", err)
+		}
+		if groupCount > 0 {
+			containedTypes = append(containedTypes, "group")
+			totalItems += groupCount
+			logrus.Infof("  Backed up %d group(s)", groupCount)
+		}
+	}
+
+	if options.Feedbacks {
+		logrus.Info("Backing up feedbacks...")
+		feedbackCount, err := backupAllFeedbacks(zipWriter, client)
+		if err != nil {
+			logrus.Warnf("Failed to backup some feedbacks: %v", err)
+		}
+		if feedbackCount > 0 {
+			containedTypes = append(containedTypes, "feedback")
+			totalItems += feedbackCount
+			logrus.Infof("  Backed up %d feedback(s)", feedbackCount)
+		}
+	}
+
+	// IMPORTANT: Users must be backed up LAST
+	if options.Users {
+		logrus.Info("Backing up users...")
+		userCount, err := backupAllUsers(zipWriter, client)
+		if err != nil {
+			logrus.Warnf("Failed to backup some users: %v", err)
+		}
+		if userCount > 0 {
+			containedTypes = append(containedTypes, "user")
+			totalItems += userCount
+			logrus.Infof("  Backed up %d user(s)", userCount)
+		}
+	}
+
 	// Determine backup type string
 	backupType := "selective"
 	if len(containedTypes) == 1 {
@@ -1030,7 +1073,7 @@ func BackupAll(client *openwebui.Client, outputDir string) error {
 	}
 
 	// Step 6: Backup chats
-	logrus.Info("Step 6/6: Backing up chats...")
+	logrus.Info("Step 6/9: Backing up chats...")
 	chatCount, err := backupAllChats(zipWriter, client)
 	if err != nil {
 		logrus.Warnf("Failed to backup some chats: %v", err)
@@ -1039,6 +1082,42 @@ func BackupAll(client *openwebui.Client, outputDir string) error {
 		containedTypes = append(containedTypes, "chat")
 		totalItems += chatCount
 		logrus.Infof("  Backed up %d chat(s)", chatCount)
+	}
+
+	// Step 7: Backup groups
+	logrus.Info("Step 7/9: Backing up groups...")
+	groupCount, err := backupAllGroups(zipWriter, client)
+	if err != nil {
+		logrus.Warnf("Failed to backup some groups: %v", err)
+	}
+	if groupCount > 0 {
+		containedTypes = append(containedTypes, "group")
+		totalItems += groupCount
+		logrus.Infof("  Backed up %d group(s)", groupCount)
+	}
+
+	// Step 8: Backup feedbacks
+	logrus.Info("Step 8/9: Backing up feedbacks...")
+	feedbackCount, err := backupAllFeedbacks(zipWriter, client)
+	if err != nil {
+		logrus.Warnf("Failed to backup some feedbacks: %v", err)
+	}
+	if feedbackCount > 0 {
+		containedTypes = append(containedTypes, "feedback")
+		totalItems += feedbackCount
+		logrus.Infof("  Backed up %d feedback(s)", feedbackCount)
+	}
+
+	// Step 9: Backup users (MUST be LAST)
+	logrus.Info("Step 9/9: Backing up users...")
+	userCount, err := backupAllUsers(zipWriter, client)
+	if err != nil {
+		logrus.Warnf("Failed to backup some users: %v", err)
+	}
+	if userCount > 0 {
+		containedTypes = append(containedTypes, "user")
+		totalItems += userCount
+		logrus.Infof("  Backed up %d user(s)", userCount)
 	}
 
 	// Add unified metadata
@@ -1447,6 +1526,306 @@ func backupFileToZip(zipWriter *zip.Writer, fileID string, client *openwebui.Cli
 	}
 	if _, err := contentFile.Write(content); err != nil {
 		return fmt.Errorf("failed to write content: %w", err)
+	}
+
+	return nil
+}
+
+// BackupGroups is the main entry point for backing up all groups
+func BackupGroups(client *openwebui.Client, outputDir string) error {
+	// Ensure output directory exists
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	logrus.Info("Fetching groups...")
+	groups, err := client.GetAllGroups()
+	if err != nil {
+		return fmt.Errorf("failed to get groups: %w", err)
+	}
+
+	if len(groups) == 0 {
+		logrus.Info("No groups found")
+		return nil
+	}
+
+	logrus.Infof("Found %d group(s)", len(groups))
+
+	// Backup all groups to a single ZIP file
+	timestamp := time.Now().UTC().Format("20060102_150405")
+	zipFilename := fmt.Sprintf("%s_groups_backup.zip", timestamp)
+	zipPath := filepath.Join(outputDir, zipFilename)
+
+	// Check if file already exists
+	if _, err := os.Stat(zipPath); err == nil {
+		return &openwebui.FileExistsError{Path: zipPath}
+	}
+
+	// Create ZIP archive
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to create zip file: %w", err)
+	}
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// Backup each group
+	for i, group := range groups {
+		logrus.Infof("Backing up group %d/%d: %s", i+1, len(groups), group.Name)
+		if err := backupGroupToZip(zipWriter, &group); err != nil {
+			logrus.Warnf("Failed to backup group '%s': %v", group.Name, err)
+			continue
+		}
+	}
+
+	// Add owui.json metadata
+	metadata := generateMetadata(client, "group", len(groups), false, nil)
+	if err := writeMetadataToZip(zipWriter, metadata); err != nil {
+		logrus.Warnf("  Failed to write metadata: %v", err)
+	}
+
+	logrus.Infof("  Created: %s", zipFilename)
+	logrus.Info("All groups backed up successfully")
+	return nil
+}
+
+// backupAllGroups backs up all groups into the unified ZIP
+func backupAllGroups(zipWriter *zip.Writer, client *openwebui.Client) (int, error) {
+	groups, err := client.GetAllGroups()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get groups: %w", err)
+	}
+
+	for i, group := range groups {
+		logrus.Infof("  Backing up group %d/%d: %s", i+1, len(groups), group.Name)
+		if err := backupGroupToZip(zipWriter, &group); err != nil {
+			logrus.Warnf("  Failed to backup group '%s': %v", group.Name, err)
+			continue
+		}
+	}
+
+	return len(groups), nil
+}
+
+// backupGroupToZip backs up a single group into an existing ZIP writer
+func backupGroupToZip(zipWriter *zip.Writer, group *openwebui.Group) error {
+	// Create groups/{id}/ directory
+	groupDir := fmt.Sprintf("groups/%s/", group.ID)
+
+	// Add group.json
+	groupJSON, err := json.MarshalIndent(group, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal group: %w", err)
+	}
+
+	groupFile, err := zipWriter.Create(groupDir + "group.json")
+	if err != nil {
+		return fmt.Errorf("failed to create group.json in zip: %w", err)
+	}
+	if _, err := groupFile.Write(groupJSON); err != nil {
+		return fmt.Errorf("failed to write group.json: %w", err)
+	}
+
+	return nil
+}
+
+// BackupFeedbacks is the main entry point for backing up all feedbacks
+func BackupFeedbacks(client *openwebui.Client, outputDir string) error {
+	// Ensure output directory exists
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	logrus.Info("Fetching feedbacks...")
+	feedbacks, err := client.GetAllFeedbacks()
+	if err != nil {
+		return fmt.Errorf("failed to get feedbacks: %w", err)
+	}
+
+	if len(feedbacks) == 0 {
+		logrus.Info("No feedbacks found")
+		return nil
+	}
+
+	logrus.Infof("Found %d feedback(s)", len(feedbacks))
+
+	// Backup all feedbacks to a single ZIP file
+	timestamp := time.Now().UTC().Format("20060102_150405")
+	zipFilename := fmt.Sprintf("%s_feedbacks_backup.zip", timestamp)
+	zipPath := filepath.Join(outputDir, zipFilename)
+
+	// Check if file already exists
+	if _, err := os.Stat(zipPath); err == nil {
+		return &openwebui.FileExistsError{Path: zipPath}
+	}
+
+	// Create ZIP archive
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to create zip file: %w", err)
+	}
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// Backup each feedback
+	for i, feedback := range feedbacks {
+		logrus.Infof("Backing up feedback %d/%d (ID: %s)", i+1, len(feedbacks), feedback.ID)
+		if err := backupFeedbackToZip(zipWriter, &feedback); err != nil {
+			logrus.Warnf("Failed to backup feedback '%s': %v", feedback.ID, err)
+			continue
+		}
+	}
+
+	// Add owui.json metadata
+	metadata := generateMetadata(client, "feedback", len(feedbacks), false, nil)
+	if err := writeMetadataToZip(zipWriter, metadata); err != nil {
+		logrus.Warnf("  Failed to write metadata: %v", err)
+	}
+
+	logrus.Infof("  Created: %s", zipFilename)
+	logrus.Info("All feedbacks backed up successfully")
+	return nil
+}
+
+// backupAllFeedbacks backs up all feedbacks into the unified ZIP
+func backupAllFeedbacks(zipWriter *zip.Writer, client *openwebui.Client) (int, error) {
+	feedbacks, err := client.GetAllFeedbacks()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get feedbacks: %w", err)
+	}
+
+	for i, feedback := range feedbacks {
+		logrus.Infof("  Backing up feedback %d/%d (ID: %s)", i+1, len(feedbacks), feedback.ID)
+		if err := backupFeedbackToZip(zipWriter, &feedback); err != nil {
+			logrus.Warnf("  Failed to backup feedback '%s': %v", feedback.ID, err)
+			continue
+		}
+	}
+
+	return len(feedbacks), nil
+}
+
+// backupFeedbackToZip backs up a single feedback into an existing ZIP writer
+func backupFeedbackToZip(zipWriter *zip.Writer, feedback *openwebui.Feedback) error {
+	// Create feedbacks/{id}/ directory
+	feedbackDir := fmt.Sprintf("feedbacks/%s/", feedback.ID)
+
+	// Add feedback.json
+	feedbackJSON, err := json.MarshalIndent(feedback, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal feedback: %w", err)
+	}
+
+	feedbackFile, err := zipWriter.Create(feedbackDir + "feedback.json")
+	if err != nil {
+		return fmt.Errorf("failed to create feedback.json in zip: %w", err)
+	}
+	if _, err := feedbackFile.Write(feedbackJSON); err != nil {
+		return fmt.Errorf("failed to write feedback.json: %w", err)
+	}
+
+	return nil
+}
+
+// BackupUsers is the main entry point for backing up all users
+func BackupUsers(client *openwebui.Client, outputDir string) error {
+	// Ensure output directory exists
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	logrus.Info("Fetching users...")
+	users, err := client.GetAllUsers()
+	if err != nil {
+		return fmt.Errorf("failed to get users: %w", err)
+	}
+
+	if len(users) == 0 {
+		logrus.Info("No users found")
+		return nil
+	}
+
+	logrus.Infof("Found %d user(s)", len(users))
+
+	// Backup all users to a single ZIP file
+	timestamp := time.Now().UTC().Format("20060102_150405")
+	zipFilename := fmt.Sprintf("%s_users_backup.zip", timestamp)
+	zipPath := filepath.Join(outputDir, zipFilename)
+
+	// Check if file already exists
+	if _, err := os.Stat(zipPath); err == nil {
+		return &openwebui.FileExistsError{Path: zipPath}
+	}
+
+	// Create ZIP archive
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to create zip file: %w", err)
+	}
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// Backup each user
+	for i, user := range users {
+		logrus.Infof("Backing up user %d/%d: %s", i+1, len(users), user.Name)
+		if err := backupUserToZip(zipWriter, &user); err != nil {
+			logrus.Warnf("Failed to backup user '%s': %v", user.Name, err)
+			continue
+		}
+	}
+
+	// Add owui.json metadata
+	metadata := generateMetadata(client, "user", len(users), false, nil)
+	if err := writeMetadataToZip(zipWriter, metadata); err != nil {
+		logrus.Warnf("  Failed to write metadata: %v", err)
+	}
+
+	logrus.Infof("  Created: %s", zipFilename)
+	logrus.Info("All users backed up successfully")
+	return nil
+}
+
+// backupAllUsers backs up all users into the unified ZIP
+func backupAllUsers(zipWriter *zip.Writer, client *openwebui.Client) (int, error) {
+	users, err := client.GetAllUsers()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get users: %w", err)
+	}
+
+	for i, user := range users {
+		logrus.Infof("  Backing up user %d/%d: %s", i+1, len(users), user.Name)
+		if err := backupUserToZip(zipWriter, &user); err != nil {
+			logrus.Warnf("  Failed to backup user '%s': %v", user.Name, err)
+			continue
+		}
+	}
+
+	return len(users), nil
+}
+
+// backupUserToZip backs up a single user into an existing ZIP writer
+func backupUserToZip(zipWriter *zip.Writer, user *openwebui.User) error {
+	// Create users/{id}/ directory
+	userDir := fmt.Sprintf("users/%s/", user.ID)
+
+	// Add user.json
+	userJSON, err := json.MarshalIndent(user, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal user: %w", err)
+	}
+
+	userFile, err := zipWriter.Create(userDir + "user.json")
+	if err != nil {
+		return fmt.Errorf("failed to create user.json in zip: %w", err)
+	}
+	if _, err := userFile.Write(userJSON); err != nil {
+		return fmt.Errorf("failed to write user.json: %w", err)
 	}
 
 	return nil

@@ -14,13 +14,13 @@ tasks:
     desc: Run the owuiback application
     cmd: go run cmd/owuiback/main.go {{.CLI_ARGS}}
 
-  backup-all:
+  backup:
     desc: Runs backup-all with encryption. Make sure to create an identity first
-    cmd: go run cmd/owuiback/main.go backup-all --dir {{.CURRENT_DIR}}/backups --encrypt-recipient $(cat {{.AGE_RECIPIENT_FILE}})
+    cmd: go run cmd/owuiback/main.go backup --out {{.CURRENT_DIR}}/backups/backup.zip --encrypt-recipient $(cat {{.AGE_RECIPIENT_FILE}})
 
-  restore-all:
+  restore:
     desc: Restores an encrypted backup file
-    cmd: go run cmd/owuiback/main.go restore-all --dir {{.CURRENT_DIR}}/backups --decrypt-identity {{.AGE_IDENTITY_FILE}}
+    cmd: go run cmd/owuiback/main.go restore --file {{.CURRENT_DIR}}/backups/backup.zip.age --overwrite --decrypt-identity {{.AGE_IDENTITY_FILE}}
 
   decrypt:
     desc: Uses age to decrypt a file

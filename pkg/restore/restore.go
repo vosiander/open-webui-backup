@@ -12,6 +12,15 @@ import (
 	"github.com/vosiander/open-webui-backup/pkg/openwebui"
 )
 
+// SelectiveRestoreOptions defines which data types to restore from a backup
+type SelectiveRestoreOptions struct {
+	Knowledge bool
+	Models    bool
+	Tools     bool
+	Prompts   bool
+	Files     bool
+}
+
 // RestoreKnowledge restores a knowledge base from a backup ZIP file
 // If overwrite is true, existing files will be replaced; otherwise they are skipped
 func RestoreKnowledge(client *openwebui.Client, zipPath string, overwrite bool) error {
@@ -996,6 +1005,124 @@ func extractFileFromZip(zipPath string) (*openwebui.FileExport, error) {
 	fileExport.Data.Content = string(fileContent)
 
 	return fileExport, nil
+}
+
+// RestoreSelective performs a selective restore from a unified backup file based on the provided options
+func RestoreSelective(client *openwebui.Client, inputFile string, options *SelectiveRestoreOptions, overwrite bool) error {
+	logrus.Info("Starting selective restore...")
+
+	// Validate that at least one option is enabled
+	if !options.Knowledge && !options.Models && !options.Tools && !options.Prompts && !options.Files {
+		return fmt.Errorf("at least one data type must be selected for restore")
+	}
+
+	// Open the backup file
+	r, err := zip.OpenReader(inputFile)
+	if err != nil {
+		return fmt.Errorf("failed to open backup file: %w", err)
+	}
+	defer r.Close()
+
+	// Read metadata
+	var metadata *openwebui.BackupMetadata
+	for _, f := range r.File {
+		if f.Name == "owui.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return fmt.Errorf("failed to read metadata: %w", err)
+			}
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return fmt.Errorf("failed to read metadata: %w", err)
+			}
+			metadata = &openwebui.BackupMetadata{}
+			if err := json.Unmarshal(data, metadata); err != nil {
+				return fmt.Errorf("failed to parse metadata: %w", err)
+			}
+			break
+		}
+	}
+
+	if metadata == nil {
+		return fmt.Errorf("metadata not found in backup file (not a unified backup)")
+	}
+
+	if !metadata.UnifiedBackup {
+		return fmt.Errorf("backup file is not a unified backup")
+	}
+
+	logrus.Infof("Restoring from unified backup with %d items", metadata.ItemCount)
+	logrus.Infof("Available types: %v", metadata.ContainedTypes)
+
+	// Restore selected types
+	if options.Knowledge {
+		if contains(metadata.ContainedTypes, "knowledge") {
+			logrus.Info("Restoring knowledge bases...")
+			if err := restoreKnowledgeBasesFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some knowledge bases: %v", err)
+			}
+		} else {
+			logrus.Info("Knowledge bases not present in backup, skipping")
+		}
+	}
+
+	if options.Models {
+		if contains(metadata.ContainedTypes, "model") {
+			logrus.Info("Restoring models...")
+			if err := restoreModelsFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some models: %v", err)
+			}
+		} else {
+			logrus.Info("Models not present in backup, skipping")
+		}
+	}
+
+	if options.Tools {
+		if contains(metadata.ContainedTypes, "tool") {
+			logrus.Info("Restoring tools...")
+			if err := restoreToolsFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some tools: %v", err)
+			}
+		} else {
+			logrus.Info("Tools not present in backup, skipping")
+		}
+	}
+
+	if options.Prompts {
+		if contains(metadata.ContainedTypes, "prompt") {
+			logrus.Info("Restoring prompts...")
+			if err := restorePromptsFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some prompts: %v", err)
+			}
+		} else {
+			logrus.Info("Prompts not present in backup, skipping")
+		}
+	}
+
+	if options.Files {
+		if contains(metadata.ContainedTypes, "file") {
+			logrus.Info("Restoring files...")
+			if err := restoreFilesFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some files: %v", err)
+			}
+		} else {
+			logrus.Info("Files not present in backup, skipping")
+		}
+	}
+
+	logrus.Info("Selective restore completed successfully")
+	return nil
+}
+
+// contains checks if a string slice contains a specific string
+func contains(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
+		}
+	}
+	return false
 }
 
 // RestoreAll restores data from either a unified backup ZIP or legacy separate ZIPs

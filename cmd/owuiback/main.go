@@ -30,19 +30,9 @@ func run() error {
 	// Create plugin registry
 	registry := plugin.NewRegistry()
 
-	// Register plugins
-	registry.Register(plugins.NewBackupKnowledgePlugin())
-	registry.Register(plugins.NewRestoreKnowledgePlugin())
-	registry.Register(plugins.NewBackupModelPlugin())
-	registry.Register(plugins.NewRestoreModelPlugin())
-	registry.Register(plugins.NewBackupToolPlugin())
-	registry.Register(plugins.NewRestoreToolPlugin())
-	registry.Register(plugins.NewBackupPromptPlugin())
-	registry.Register(plugins.NewRestorePromptPlugin())
-	registry.Register(plugins.NewBackupFilePlugin())
-	registry.Register(plugins.NewRestoreFilePlugin())
-	registry.Register(plugins.NewBackupAllPlugin())
-	registry.Register(plugins.NewRestoreAllPlugin())
+	// Register unified backup and restore plugins
+	registry.Register(plugins.NewBackupPlugin())
+	registry.Register(plugins.NewRestorePlugin())
 
 	// Create root command
 	rootCmd := &cobra.Command{

@@ -15,6 +15,15 @@ import (
 	"github.com/vosiander/open-webui-backup/pkg/openwebui"
 )
 
+// SelectiveBackupOptions defines which data types to include in a backup
+type SelectiveBackupOptions struct {
+	Knowledge bool
+	Models    bool
+	Tools     bool
+	Prompts   bool
+	Files     bool
+}
+
 // BackupKnowledge is the main entry point for backing up all knowledge bases
 func BackupKnowledge(client *openwebui.Client, outputDir string) error {
 	// Ensure output directory exists
@@ -678,6 +687,118 @@ func backupSingleFile(fileID string, client *openwebui.Client, outputDir string)
 	}
 
 	logrus.Infof("  Created: %s (%d bytes)", zipFilename, len(content))
+	return nil
+}
+
+// BackupSelective performs a selective backup based on the provided options
+// outputFile should be the full path to the output ZIP file
+func BackupSelective(client *openwebui.Client, outputFile string, options *SelectiveBackupOptions) error {
+	logrus.Info("Starting selective backup...")
+
+	// Validate that at least one option is enabled
+	if !options.Knowledge && !options.Models && !options.Tools && !options.Prompts && !options.Files {
+		return fmt.Errorf("at least one data type must be selected for backup")
+	}
+
+	// Check if file already exists
+	if _, err := os.Stat(outputFile); err == nil {
+		return &openwebui.FileExistsError{Path: outputFile}
+	}
+
+	// Create ZIP file
+	zipFile, err := os.Create(outputFile)
+	if err != nil {
+		return fmt.Errorf("failed to create zip file: %w", err)
+	}
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// Track contained types and total item count
+	containedTypes := []string{}
+	totalItems := 0
+
+	// Backup selected types
+	if options.Knowledge {
+		logrus.Info("Backing up knowledge bases...")
+		kbCount, err := backupAllKnowledgeBases(zipWriter, client)
+		if err != nil {
+			logrus.Warnf("Failed to backup some knowledge bases: %v", err)
+		}
+		if kbCount > 0 {
+			containedTypes = append(containedTypes, "knowledge")
+			totalItems += kbCount
+			logrus.Infof("  Backed up %d knowledge base(s)", kbCount)
+		}
+	}
+
+	if options.Models {
+		logrus.Info("Backing up models...")
+		modelCount, err := backupAllModels(zipWriter, client)
+		if err != nil {
+			logrus.Warnf("Failed to backup some models: %v", err)
+		}
+		if modelCount > 0 {
+			containedTypes = append(containedTypes, "model")
+			totalItems += modelCount
+			logrus.Infof("  Backed up %d model(s)", modelCount)
+		}
+	}
+
+	if options.Tools {
+		logrus.Info("Backing up tools...")
+		toolCount, err := backupAllTools(zipWriter, client)
+		if err != nil {
+			logrus.Warnf("Failed to backup some tools: %v", err)
+		}
+		if toolCount > 0 {
+			containedTypes = append(containedTypes, "tool")
+			totalItems += toolCount
+			logrus.Infof("  Backed up %d tool(s)", toolCount)
+		}
+	}
+
+	if options.Prompts {
+		logrus.Info("Backing up prompts...")
+		promptCount, err := backupAllPrompts(zipWriter, client)
+		if err != nil {
+			logrus.Warnf("Failed to backup some prompts: %v", err)
+		}
+		if promptCount > 0 {
+			containedTypes = append(containedTypes, "prompt")
+			totalItems += promptCount
+			logrus.Infof("  Backed up %d prompt(s)", promptCount)
+		}
+	}
+
+	if options.Files {
+		logrus.Info("Backing up files...")
+		fileCount, err := backupAllFiles(zipWriter, client)
+		if err != nil {
+			logrus.Warnf("Failed to backup some files: %v", err)
+		}
+		if fileCount > 0 {
+			containedTypes = append(containedTypes, "file")
+			totalItems += fileCount
+			logrus.Infof("  Backed up %d file(s)", fileCount)
+		}
+	}
+
+	// Determine backup type string
+	backupType := "selective"
+	if len(containedTypes) == 1 {
+		backupType = containedTypes[0]
+	}
+
+	// Add unified metadata
+	metadata := generateMetadata(client, backupType, totalItems, true, containedTypes)
+	if err := writeMetadataToZip(zipWriter, metadata); err != nil {
+		return fmt.Errorf("failed to write metadata: %w", err)
+	}
+
+	logrus.Infof("Created selective backup: %s (%d total items)", filepath.Base(outputFile), totalItems)
+	logrus.Info("Selective backup completed successfully")
 	return nil
 }
 

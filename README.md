@@ -1,16 +1,15 @@
 # open-webui-backup
 
-A comprehensive CLI tool to backup and restore data from Open WebUI applications, including knowledge bases, models, tools, prompts, and files.
+A secure CLI tool for backing up and restoring data from Open WebUI instances with mandatory encryption.
 
 ## Features
 
-- **Plugin-based architecture** for extensibility
-- **Unified backup format** - Single ZIP file containing all data types
-- **Individual backups** - Backup specific items (knowledge bases, models, tools, prompts, files)
-- **Metadata tracking** - Every backup includes `owui.json` with version and source information
-- **Backward compatibility** - Restore from legacy separate backup files
-- **Idempotent restore** - Safe to run multiple times
-- **Overwrite control** - Choose whether to replace existing items
+- **Unified Commands** - Simple backup/restore with optional type filtering
+- **Mandatory Encryption** - All backups secured with age public key cryptography
+- **Selective Backup/Restore** - Choose specific data types (knowledge, models, tools, prompts, files)
+- **Team Workflows** - Multi-recipient encryption for shared access
+- **Environment-based Configuration** - Secure credential management
+- **Cross-platform** - Binaries for Linux, macOS, Windows (amd64/arm64)
 
 ## Installation
 
@@ -26,681 +25,549 @@ go build -o owuiback ./cmd/owuiback
 task build
 ```
 
-## Configuration
+## Quick Start
 
-Configure the tool using environment variables:
+### 1. Generate Age Key Pair (One-Time Setup)
 
-- `OPEN_WEBUI_URL`: The URL of your Open WebUI instance (default: "https://example.com")
-- `OPEN_WEBUI_API_KEY`: Your Open WebUI API key (required)
+```bash
+# Generate identity (private key)
+age-keygen -o ~/.age/identity.txt
+
+# Extract recipient (public key)
+age-keygen -y ~/.age/identity.txt > ~/.age/recipient.txt
+
+# View your public key
+cat ~/.age/recipient.txt
+# Output: age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+```
+
+### 2. Configure Environment Variables
+
+```bash
+export OPEN_WEBUI_URL="https://your-instance.com"
+export OPEN_WEBUI_API_KEY="sk-your-api-key"
+export OWUI_ENCRYPTED_RECIPIENT=$(cat ~/.age/recipient.txt)
+export OWUI_DECRYPT_IDENTITY="$HOME/.age/identity.txt"
+```
+
+### 3. Create Backup
+
+```bash
+# Full backup (all data types)
+./owuiback backup --out ./backups/full-backup.zip
+
+# Selective backup (specific types)
+./owuiback backup --out ./backups/kb-only.zip --knowledge
+```
+
+### 4. Restore Backup
+
+```bash
+# Full restore
+./owuiback restore --file ./backups/full-backup.zip.age
+
+# Selective restore
+./owuiback restore --file ./backups/full-backup.zip.age --knowledge --models
+```
 
 ## Available Commands
 
-### Backup Commands
+### backup
 
-- `backup-all` - Backup all data types to a single unified ZIP file
-- `backup-knowledge` - Backup knowledge bases
-- `backup-model` - Backup models
-- `backup-tool` - Backup tools
-- `backup-prompt` - Backup prompts
-- `backup-file` - Backup files
-
-### Restore Commands
-
-- `restore-all` - Restore from unified or legacy backup
-- `restore-knowledge` - Restore knowledge bases
-- `restore-model` - Restore models
-- `restore-tool` - Restore tools
-- `restore-prompt` - Restore prompts
-- `restore-file` - Restore files
-
-## Usage
-
-### Unified Backup (Recommended)
-
-The `backup-all` command creates a **single ZIP file** containing all your Open WebUI data with complete metadata tracking.
-
-**Required flags:**
-- `--dir` or `-d`: Directory for backup file
-
-**Example:**
-```bash
-export OPEN_WEBUI_URL="https://myinstance.com"
-export OPEN_WEBUI_API_KEY="sk-xxx"
-./owuiback backup-all --dir ./backups
-```
-
-**Output:**
-```
-20251024_220315_owui_full_backup.zip
-```
-
-**Unified ZIP Structure:**
-```
-20251024_220315_owui_full_backup.zip
-├── owui.json                      # Backup metadata
-├── knowledge-bases/
-│   ├── kb-id-1/
-│   │   ├── knowledge_base.json
-│   │   └── documents/
-│   │       └── file.pdf
-│   └── kb-id-2/
-│       └── ...
-├── models/
-│   ├── model-id-1/
-│   │   ├── model.json
-│   │   ├── model-files/
-│   │   └── knowledge-bases/
-│   └── ...
-├── tools/
-│   ├── tool-id-1/
-│   │   └── tool.json
-│   └── ...
-├── prompts/
-│   ├── command-1/
-│   │   └── prompt.json
-│   └── ...
-└── files/
-    ├── file-id-1/
-    │   ├── file.json
-    │   └── content/
-    │       └── original-filename.ext
-    └── ...
-```
-
-**owui.json Metadata:**
-```json
-{
-  "open_webui_url": "https://myinstance.com",
-  "open_webui_version": "0.3.32",
-  "backup_tool_version": "0.3.0",
-  "backup_timestamp": "2025-10-24T22:03:15Z",
-  "backup_type": "full",
-  "item_count": 42,
-  "unified_backup": true,
-  "contained_types": ["knowledge", "model", "tool", "prompt", "file"]
-}
-```
-
-### Unified Restore
-
-The `restore-all` command automatically detects and restores from either unified or legacy backup formats.
-
-**Required flags:**
-- `--dir` or `-d`: Path to unified ZIP file or directory with legacy backups
-
-**Optional flags:**
-- `--overwrite`: Overwrite existing items (default: false)
-
-**Example (Unified):**
-```bash
-./owuiback restore-all --dir ./backups/20251024_220315_owui_full_backup.zip --overwrite
-```
-
-**Example (Legacy Directory):**
-```bash
-./owuiback restore-all --dir ./backups/20251024_old_backup/
-```
-
-**Behavior:**
-- **Unified format**: Automatically detected by presence of `owui.json` with `unified_backup: true`
-- **Legacy format**: Automatically detected when directory contains separate ZIP files
-- **Idempotent**: Safe to run multiple times
-- **Selective restore**: Only restores data types present in backup
-
-### Individual Backups
-
-Each data type can be backed up individually. All individual backups include `owui.json` metadata.
-
-#### Backup Knowledge Bases
+Create an encrypted backup of Open WebUI data.
 
 ```bash
-./owuiback backup-knowledge --dir ./backups
+owuiback backup --out OUTPUT_FILE [OPTIONS]
 ```
 
-**Output:** `20251024_220315_knowledge_base_name.zip`
+**Required Flags:**
+- `--out`, `-o` - Output file path (`.age` extension added automatically)
 
-#### Backup Models
+**Encryption Flags (one required):**
+- `--encrypt-recipient` - Age public key (repeatable for multiple recipients)
+  - Or use `OWUI_ENCRYPTED_RECIPIENT` environment variable
 
+**Selective Type Flags (optional, default: all types):**
+- `--prompts` - Include only prompts
+- `--tools` - Include only tools
+- `--knowledge` - Include only knowledge bases
+- `--models` - Include only models
+- `--files` - Include only files
+
+**Examples:**
 ```bash
-./owuiback backup-model --dir ./backups
+# Full backup (all types)
+./owuiback backup --out ./backups/full.zip
+
+# Selective backup
+./owuiback backup --out ./backups/kb.zip --knowledge
+./owuiback backup --out ./backups/prompts-tools.zip --prompts --tools
+
+# With explicit recipient
+./owuiback backup --out ./backups/full.zip \
+    --encrypt-recipient age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+
+# Team backup (multiple recipients)
+./owuiback backup --out ./backups/team.zip \
+    --encrypt-recipient age1alice... \
+    --encrypt-recipient age1bob...
 ```
 
-**Output:** `20251024_220315_model_name.zip`
+### restore
 
-#### Backup Tools
+Restore data from an encrypted backup.
 
 ```bash
-./owuiback backup-tool --dir ./backups
+owuiback restore --file INPUT_FILE [OPTIONS]
 ```
 
-**Output:** `20251024_220315_tools.zip`
+**Required Flags:**
+- `--file`, `-f` - Input file path (encrypted .age file)
 
-#### Backup Prompts
+**Decryption Flags (one required):**
+- `--decrypt-identity` - Path to age identity file (repeatable)
+  - Or use `OWUI_DECRYPT_IDENTITY` environment variable
 
+**Optional Flags:**
+- `--overwrite` - Overwrite existing data (default: false, skips existing items)
+
+**Selective Type Flags (optional, default: all types in backup):**
+- `--prompts` - Restore only prompts
+- `--tools` - Restore only tools
+- `--knowledge` - Restore only knowledge bases
+- `--models` - Restore only models
+- `--files` - Restore only files
+
+**Examples:**
 ```bash
-./owuiback backup-prompt --dir ./backups
-```
+# Full restore (all types in backup)
+./owuiback restore --file ./backups/full.zip.age
 
-**Output:** `20251024_220315_prompts.zip`
+# Selective restore
+./owuiback restore --file ./backups/full.zip.age --knowledge
+./owuiback restore --file ./backups/full.zip.age --prompts --tools
 
-#### Backup Files
+# With overwrite
+./owuiback restore --file ./backups/full.zip.age --overwrite
 
-```bash
-./owuiback backup-file --dir ./backups
-```
+# With explicit identity file
+./owuiback restore --file ./backups/full.zip.age \
+    --decrypt-identity ~/.age/identity.txt
 
-**Output:** `20251024_220315_files.zip`
-
-### Individual Restores
-
-Each backup type can be restored individually with the same `--overwrite` flag behavior.
-
-#### Restore Knowledge Base
-
-```bash
-./owuiback restore-knowledge --dir ./backups/20251024_220315_knowledge_base_name.zip --overwrite
-```
-
-#### Restore Model
-
-```bash
-./owuiback restore-model --dir ./backups/20251024_220315_model_name.zip --overwrite
-```
-
-#### Restore Tool
-
-```bash
-./owuiback restore-tool --dir ./backups/20251024_220315_tools.zip --overwrite
-```
-
-#### Restore Prompt
-
-```bash
-./owuiback restore-prompt --dir ./backups/20251024_220315_prompts.zip --overwrite
-```
-
-#### Restore File
-
-```bash
-./owuiback restore-file --dir ./backups/20251024_220315_files.zip --overwrite
+# Team restore (any team member's identity works)
+./owuiback restore --file ./backups/team.zip.age \
+    --decrypt-identity ./alice_identity.txt
 ```
 
 ## Encryption
 
-All backup operations support optional encryption using [age](https://age-encryption.org/) - a modern, secure file encryption tool. Encrypted backups are protected with either a passphrase or public key cryptography.
+All backups are **mandatory encrypted** using [age](https://age-encryption.org/) - a modern, secure file encryption tool.
 
-### Why Encrypt Backups?
+### Why Age?
 
-- **Security**: Protect sensitive data (knowledge bases, prompts, API configurations)
-- **Compliance**: Meet data protection requirements
-- **Trust**: Safely store backups in cloud storage or shared locations
+- **Modern Cryptography**: X25519 public key encryption
+- **Simple**: Easy key generation and management
+- **Team-Friendly**: Multiple recipient support
+- **Secure**: Created by cryptography expert Filippo Valsorda
 
-### Encryption Modes
+### Key Management
 
-#### 1. Passphrase-Based Encryption (Recommended for Personal Use)
+#### Generate Keys
 
-The simplest method - encrypt with a passphrase, decrypt with the same passphrase.
-
-**Backup with encryption:**
 ```bash
-export OPEN_WEBUI_URL="https://myinstance.com"
-export OPEN_WEBUI_API_KEY="sk-xxx"
-
-# Unified backup with encryption
-./owuiback backup-all --dir ./backups --encrypt
-Enter passphrase: ****************
-Confirm passphrase: ****************
-✓ Backup created: backups/20251024_220315_owui_full_backup.zip.age
-```
-
-**Restore with decryption:**
-```bash
-./owuiback restore-all --dir ./backups/20251024_220315_owui_full_backup.zip.age --decrypt
-Enter passphrase: ****************
-✓ Backup decrypted successfully
-✓ Restored 42 items
-```
-
-**Individual backup types with encryption:**
-```bash
-# Knowledge base
-./owuiback backup-knowledge --dir ./backups --encrypt
-
-# Models
-./owuiback backup-model --dir ./backups --encrypt
-
-# Tools
-./owuiback backup-tool --dir ./backups --encrypt
-
-# Prompts
-./owuiback backup-prompt --dir ./backups --encrypt
-
-# Files
-./owuiback backup-file --dir ./backups --encrypt
-```
-
-#### 2. Public Key Encryption (Recommended for Teams/Automation)
-
-Use asymmetric cryptography - encrypt with a public key, decrypt with the private key. Perfect for:
-- Team environments (multiple people can decrypt)
-- Automated backups (no interactive passphrase)
-- Key rotation and access control
-
-**Generate age key pair:**
-```bash
-# Generate new identity (private key)
+# Generate identity (private key)
 age-keygen -o ~/.age/identity.txt
-Public key: age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
 
-# Extract public key (recipient)
+# Extract recipient (public key) 
 age-keygen -y ~/.age/identity.txt > ~/.age/recipient.txt
+
+# Secure the identity file
+chmod 600 ~/.age/identity.txt
 ```
 
-**Backup with recipient (public key):**
-```bash
-# Using public key directly
-./owuiback backup-all --dir ./backups --encrypt-recipient age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+#### Team Setup
 
-# Or from file
-./owuiback backup-all --dir ./backups --encrypt-recipient $(cat ~/.age/recipient.txt)
-✓ Backup created: backups/20251024_220315_owui_full_backup.zip.age
-```
+Each team member generates their own key pair:
 
-**Restore with identity (private key):**
 ```bash
-./owuiback restore-all --dir ./backups/20251024_220315_owui_full_backup.zip.age \
-    --decrypt-identity ~/.age/identity.txt
-✓ Backup decrypted successfully
-✓ Restored 42 items
-```
-
-**Team example - Multiple recipients:**
-```bash
-# Generate keys for each team member
+# Alice
 age-keygen -o alice_identity.txt
+ALICE_KEY=$(age-keygen -y alice_identity.txt)
+
+# Bob
 age-keygen -o bob_identity.txt
+BOB_KEY=$(age-keygen -y bob_identity.txt)
 
-# Encrypt for multiple recipients
-./owuiback backup-all --dir ./backups \
-    --encrypt-recipient $(age-keygen -y alice_identity.txt) \
-    --encrypt-recipient $(age-keygen -y bob_identity.txt)
+# Create backup for both
+./owuiback backup --out team-backup.zip \
+    --encrypt-recipient $ALICE_KEY \
+    --encrypt-recipient $BOB_KEY
 
-# Either Alice or Bob can decrypt
-./owuiback restore-all --dir backups/backup.zip.age --decrypt-identity alice_identity.txt
+# Either Alice or Bob can restore
+./owuiback restore --file team-backup.zip.age --decrypt-identity alice_identity.txt
 # OR
-./owuiback restore-all --dir backups/backup.zip.age --decrypt-identity bob_identity.txt
+./owuiback restore --file team-backup.zip.age --decrypt-identity bob_identity.txt
 ```
 
 ### Encrypted File Format
 
-Encrypted backups use the `.age` extension:
+All backups automatically get `.age` extension:
 
-**Unencrypted:**
 ```
-20251024_220315_owui_full_backup.zip        (plaintext)
-```
-
-**Encrypted:**
-```
-20251024_220315_owui_full_backup.zip.age    (age-encrypted)
+Input:  full-backup.zip
+Output: full-backup.zip.age (encrypted)
 ```
 
-The tool automatically detects encrypted files and prompts for credentials during restore.
+The encrypted file uses age armor format (ASCII-armored) for safe storage and transmission.
 
-### Encryption Flags
+## Configuration
 
-**Backup commands:**
-- `--encrypt`: Prompt for passphrase (interactive)
-- `--encrypt-recipient <key>`: Encrypt with public key (can be used multiple times)
+### Environment Variables
 
-**Restore commands:**
-- `--decrypt`: Prompt for passphrase (interactive)
-- `--decrypt-identity <file>`: Path to age identity file (private key, can be used multiple times)
+**Required:**
+- `OPEN_WEBUI_URL` - Your Open WebUI instance URL
+- `OPEN_WEBUI_API_KEY` - API key for authentication
+- `OWUI_ENCRYPTED_RECIPIENT` - Age public key for backup (or use `--encrypt-recipient`)
+- `OWUI_DECRYPT_IDENTITY` - Path to age identity file for restore (or use `--decrypt-identity`)
 
-### Environment Variables (Optional)
+**Optional:**
+- `LOG_LEVEL` - Logging level (debug, info, warn, error)
 
-For automation scenarios, credentials can be provided via environment variables:
+### Example Configuration
 
 ```bash
-# Passphrase mode (use with caution)
-export OWUI_ENCRYPT_PASSPHRASE="my-secure-passphrase"
-./owuiback backup-all --dir ./backups --encrypt
-
-# Public key mode (safer for automation)
-export OWUI_ENCRYPT_RECIPIENT="age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
-export OWUI_DECRYPT_IDENTITY="/path/to/identity.txt"
-./owuiback backup-all --dir ./backups --encrypt
-./owuiback restore-all --dir ./backups/backup.zip.age --decrypt
+# Create .env file or add to .bashrc/.zshrc
+export OPEN_WEBUI_URL="https://openwebui.example.com"
+export OPEN_WEBUI_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxx"
+export OWUI_ENCRYPTED_RECIPIENT="age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+export OWUI_DECRYPT_IDENTITY="$HOME/.age/identity.txt"
 ```
 
-⚠️ **Security Note**: Avoid storing passphrases in environment variables in production. Use identity files or interactive prompts instead.
+## Usage Examples
 
-### Security Best Practices
+### Basic Workflows
 
-1. **Use Strong Passphrases**: Minimum 12 characters, mix of letters, numbers, symbols
-2. **Protect Identity Files**: Set proper permissions (`chmod 600 ~/.age/identity.txt`)
-3. **Key Rotation**: Regularly generate new keys for team members
-4. **Backup Keys Securely**: Store identity files in secure locations (password managers, vaults)
-5. **Test Decryption**: Always verify you can decrypt before deleting source data
-6. **Automated Workflows**: Prefer public key mode over passphrase for scripts
+```bash
+# Daily backup
+./owuiback backup --out ./backups/daily-$(date +%Y%m%d).zip
 
-### Automated Backup Example
+# Backup only knowledge bases
+./owuiback backup --out ./backups/knowledge-only.zip --knowledge
+
+# Backup prompts and tools
+./owuiback backup --out ./backups/prompts-tools.zip --prompts --tools
+
+# Restore everything
+./owuiback restore --file ./backups/daily-20251025.zip.age
+
+# Restore only models
+./owuiback restore --file ./backups/daily-20251025.zip.age --models
+
+# Force overwrite existing data
+./owuiback restore --file ./backups/daily-20251025.zip.age --overwrite
+```
+
+### Automated Backup Script
 
 ```bash
 #!/bin/bash
-# Automated encrypted backup script
+# automated-backup.sh
 
-# Configuration
+set -e
+
 BACKUP_DIR="/secure/backups"
-RECIPIENT_FILE="/secure/age/recipient.txt"
-IDENTITY_FILE="/secure/age/identity.txt"
 RETENTION_DAYS=30
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="$BACKUP_DIR/owui-backup-$DATE.zip"
 
-# Create encrypted backup
-./owuiback backup-all \
-    --dir "$BACKUP_DIR" \
-    --encrypt-recipient "$(cat $RECIPIENT_FILE)"
+# Create backup
+./owuiback backup --out "$BACKUP_FILE"
 
-# Test restore (dry-run)
-LATEST_BACKUP=$(ls -t $BACKUP_DIR/*.age | head -1)
-./owuiback restore-all \
-    --dir "$LATEST_BACKUP" \
-    --decrypt-identity "$IDENTITY_FILE" \
-    2>&1 | grep -q "successfully" && echo "✓ Backup verified"
-
-# Cleanup old backups
-find "$BACKUP_DIR" -name "*.age" -mtime +$RETENTION_DAYS -delete
+# Verify backup was created
+if [ -f "$BACKUP_FILE.age" ]; then
+    echo "✓ Backup created: $BACKUP_FILE.age"
+    
+    # Test restore (dry-run - restore to verify, then delete test restore)
+    # Note: Implement your own verification logic
+    
+    # Cleanup old backups
+    find "$BACKUP_DIR" -name "*.age" -mtime +$RETENTION_DAYS -delete
+    echo "✓ Cleaned up backups older than $RETENTION_DAYS days"
+else
+    echo "✗ Backup failed"
+    exit 1
+fi
 ```
 
-### Troubleshooting Encryption
+### Docker Usage
 
-**"Failed to decrypt: incorrect passphrase"**
-- Verify you're using the correct passphrase
-- Check for typos (passphrases are case-sensitive)
-
-**"Failed to decrypt: no identity matched"**
-- Ensure identity file path is correct
-- Verify the identity file matches the recipient used for encryption
-- Check identity file permissions
-
-**"age command not found" (Docker)**
-- Ensure using updated Docker image with age support
-- Build with: `docker build -t owuiback:latest .`
-
-**Encrypted backup but forgot passphrase/lost identity**
-- Passphrases cannot be recovered - backups are permanently encrypted
-- Identity files are the only way to decrypt public-key encrypted backups
-- Always backup identity files securely
-
-## Backup Metadata
-
-Every backup ZIP file (both unified and individual) includes an `owui.json` metadata file at the root. This enables:
-
-- **Version compatibility checking** (future feature)
-- **Source tracking** - Know which Open WebUI instance created the backup
-- **Timestamp tracking** - When the backup was created
-- **Content identification** - What data types are included
-- **Format detection** - Unified vs individual backup
-
-**Individual Backup Metadata Example:**
-```json
-{
-  "open_webui_url": "https://myinstance.com",
-  "open_webui_version": "0.3.32",
-  "backup_tool_version": "0.3.0",
-  "backup_timestamp": "2025-10-24T22:03:15Z",
-  "backup_type": "tool",
-  "item_count": 5,
-  "unified_backup": false
-}
-```
-
-## Restore Behavior
-
-### Overwrite Flag
-
-The `--overwrite` flag controls behavior when an item already exists:
-
-**Without `--overwrite` (default):**
-- Existing items are **skipped**
-- New items are added
-- Safe for incremental backups
-- Preserves existing data
-
-**With `--overwrite`:**
-- Existing items are **replaced** with backup version
-- New items are added
-- Use when you want to revert to backup state
-- Overwrites local modifications
-
-### Idempotent Restore
-
-All restore operations are idempotent - you can safely run them multiple times:
-
-1. First run: Creates all items from backup
-2. Subsequent runs: 
-   - Updates metadata if changed
-   - Adds missing items
-   - Skips or overwrites existing items based on `--overwrite` flag
-
-**Example workflow:**
 ```bash
-# Initial restore
-./owuiback restore-all --dir backup.zip
+# Build image
+docker build -t owuiback:latest .
 
-# Fails partway through due to network issue
-# Simply run again - already-restored items will be skipped
-./owuiback restore-all --dir backup.zip
+# Run backup
+docker run --rm \
+  -e OPEN_WEBUI_URL="https://instance.com" \
+  -e OPEN_WEBUI_API_KEY="sk-xxx" \
+  -e OWUI_ENCRYPTED_RECIPIENT="age1..." \
+  -v $(pwd)/backups:/backups \
+  owuiback:latest backup --out /backups/backup.zip
 
-# Want to reset everything to backup state
-./owuiback restore-all --dir backup.zip --overwrite
+# Run restore
+docker run --rm \
+  -e OPEN_WEBUI_URL="https://instance.com" \
+  -e OPEN_WEBUI_API_KEY="sk-xxx" \
+  -e OWUI_DECRYPT_IDENTITY="/keys/identity.txt" \
+  -v $(pwd)/backups:/backups \
+  -v $(pwd)/.age:/keys \
+  owuiback:latest restore --file /backups/backup.zip.age
 ```
 
 ## Data Types
 
 ### Knowledge Bases
-
-- Complete knowledge base metadata (name, description, access control)
-- All associated document files with original filenames
+- Complete metadata (name, description, access control)
+- All document files with original filenames
 - File relationships and IDs
+- Heterogeneous types (file and collection)
 
 ### Models
-
 - Model metadata and configuration
 - Associated knowledge bases
-- Model files (configurations, weights, etc.)
+- Model files (configurations, weights)
+- Embedded KB handling with ID mapping
 
 ### Tools
-
 - Tool definitions (name, ID, content)
 - Tool metadata and access control
 - Creation and update timestamps
 
 ### Prompts
-
 - Prompt definitions (command, title, content)
 - Access control settings
 - Creation and update timestamps
 
 ### Files
-
 - File metadata (filename, hash, size)
 - Complete file content/data
 - Access control and timestamps
 
-## Testing
+## Backup Format
 
-### Integration Tests
+### Structure
 
-Comprehensive integration tests are available in `test/integration/`:
+```
+backup.zip.age (encrypted)
+  └─ backup.zip (decrypts to)
+      ├── owui.json                  # Backup metadata
+      ├── knowledge-bases/
+      │   └── kb-id-1/
+      │       ├── knowledge_base.json
+      │       └── documents/
+      │           └── file.pdf
+      ├── models/
+      │   └── model-id-1/
+      │       ├── model.json
+      │       ├── model-files/
+      │       └── knowledge-bases/
+      ├── tools/
+      │   └── tool-id-1/
+      │       └── tool.json
+      ├── prompts/
+      │   └── command-1/
+      │       └── prompt.json
+      └── files/
+          └── file-id-1/
+              ├── file.json
+              └── content/
+```
+
+### Metadata
+
+Every backup includes `owui.json` with:
+- Open WebUI instance URL
+- Backup timestamp
+- Data types included
+- Item counts
+- Tool version
+
+## Restore Behavior
+
+### Default (Without --overwrite)
+- Existing items are **skipped**
+- New items are added
+- Safe for incremental updates
+- Preserves local modifications
+
+### With --overwrite Flag
+- Existing items are **replaced** with backup versions
+- New items are added
+- Use when reverting to backup state
+- Overwrites all local modifications
+
+### Idempotent Operations
+
+All restore operations are idempotent - safe to run multiple times:
 
 ```bash
-# Run all integration tests
+# First run: Restores all items
+./owuiback restore --file backup.zip.age
+
+# Second run: Skips existing, adds only new items
+./owuiback restore --file backup.zip.age
+
+# With overwrite: Replaces everything with backup versions
+./owuiback restore --file backup.zip.age --overwrite
+```
+
+## Security Best Practices
+
+1. **Protect Identity Files**
+   ```bash
+   chmod 600 ~/.age/identity.txt
+   ```
+
+2. **Use Environment Variables**
+   - Don't embed keys in scripts
+   - Use environment variables or secret managers
+
+3. **Store Backups Securely**
+   - Encrypted backups are safe for cloud storage
+   - Still protect from unauthorized access
+
+4. **Key Rotation**
+   - Generate new keys periodically
+   - Re-encrypt old backups with new keys if needed
+
+5. **Test Restores**
+   - Periodically verify you can restore from backups
+   - Test with non-production instance first
+
+6. **Multi-recipient for Teams**
+   - Each team member has their own identity
+   - Can revoke access by creating new backup without that recipient
+
+## Troubleshooting
+
+### "API key is required"
+- Set `OPEN_WEBUI_API_KEY` environment variable
+- Verify API key is valid and has necessary permissions
+
+### "Failed to get encryption recipients"
+- Set `OWUI_ENCRYPTED_RECIPIENT` environment variable
+- Or use `--encrypt-recipient` flag with a valid age public key
+- Generate keys with: `age-keygen`
+
+### "Failed to get decryption identity files"
+- Set `OWUI_DECRYPT_IDENTITY` environment variable
+- Or use `--decrypt-identity` flag with path to identity file
+- Verify identity file exists and is readable
+
+### "Failed to decrypt: no identity matched"
+- Ensure identity file matches one of the backup's recipients
+- Check if using correct identity file
+- Verify file is not corrupted
+
+### "age command not found" (Docker)
+- Rebuild Docker image with updated Dockerfile
+- Image should include age package in Alpine runtime
+
+### "Failed to connect to Open WebUI"
+- Check `OPEN_WEBUI_URL` is correct
+- Verify Open WebUI instance is running and accessible
+- Check network connectivity
+
+## Migration from v1.0
+
+If you're upgrading from v1.0, note these **breaking changes**:
+
+### Command Changes
+```bash
+# OLD (v1.0)
+./owuiback backup-all --dir ./backups
+./owuiback restore-all --dir ./backups/backup.zip
+
+# NEW (v2.0)
+./owuiback backup --out ./backups/backup.zip
+./owuiback restore --file ./backups/backup.zip.age
+```
+
+### Encryption Changes
+```bash
+# OLD (v1.0) - Optional encryption
+./owuiback backup-all --dir ./backups --encrypt
+
+# NEW (v2.0) - Mandatory encryption
+./owuiback backup --out ./backups/backup.zip
+# Always creates backup.zip.age
+```
+
+### Environment Variables
+```bash
+# OLD (v1.0)
+export AGE_PASSPHRASE="secret"
+
+# NEW (v2.0)
+export OWUI_ENCRYPTED_RECIPIENT="age1..."
+export OWUI_DECRYPT_IDENTITY="/path/to/identity.txt"
+```
+
+### Key Differences
+
+1. **Commands**: 12 commands → 2 commands with type flags
+2. **Encryption**: Optional → Mandatory (always encrypted)
+3. **Modes**: Passphrase + Public key → Public key only
+4. **Flags**: `--dir` → `--out` (backup) / `--file` (restore)
+
+### Compatibility
+
+- ✅ Backup file format unchanged (still ZIP)
+- ✅ v1.0 encrypted backups work with v2.0 restore
+- ❌ CLI interface NOT backward compatible
+- ❌ Must update scripts and automation
+
+## Development
+
+### Build Requirements
+- Go 1.24.7 or higher
+- age CLI tool
+- Docker (optional, for containerization)
+
+### Local Development
+
+```bash
+# Install dependencies
+task bootstrap
+
+# Run locally
+task run -- backup --out ./test.zip
+
+# Build all platforms
+task build
+
+# Run in Docker
+task docker-run
+```
+
+### Testing
+
+```bash
+# Run integration tests
 export OWUI_URL="http://localhost:8080"
-export OWUI_API_KEY="your-api-key"
+export OWUI_API_KEY="your-key"
 go test -v ./test/integration
 
 # Run specific test
-go test -v ./test/integration -run TestUnifiedBackupAll
-
-# Run benchmarks
-go test -v -bench=. ./test/integration
-```
-
-See `test/integration/README.md` for detailed testing documentation.
-
-## Plugin Architecture
-
-This tool uses a plugin-based architecture that allows for easy extension. Each command is implemented as a plugin that adheres to the `Plugin` interface defined in `pkg/plugin/plugin.go`.
-
-### Plugin Interface
-
-```go
-type Plugin interface {
-    Name() string                          // Command name
-    Description() string                   // Command description
-    SetupFlags(cmd *cobra.Command)        // Add custom flags
-    Execute(cfg *config.Config) error     // Execute command
-}
-```
-
-### Adding New Plugins
-
-1. Create a new file in the `plugins/` directory
-2. Implement the `Plugin` interface
-3. Register the plugin in `cmd/owuiback/main.go`
-
-Example:
-```go
-package plugins
-
-type MyPlugin struct {
-    dir string
-}
-
-func NewMyPlugin() *MyPlugin {
-    return &MyPlugin{}
-}
-
-func (p *MyPlugin) Name() string {
-    return "my-command"
-}
-
-func (p *MyPlugin) Description() string {
-    return "My command description"
-}
-
-func (p *MyPlugin) SetupFlags(cmd *cobra.Command) {
-    cmd.Flags().StringVarP(&p.dir, "dir", "d", "", "Directory (required)")
-    cmd.MarkFlagRequired("dir")
-}
-
-func (p *MyPlugin) Execute(cfg *config.Config) error {
-    // Command implementation
-    client := openwebui.NewClient(cfg.OpenWebUIURL, cfg.OpenWebUIAPIKey)
-    // ... implementation
-    return nil
-}
-```
-
-Then register in `main.go`:
-```go
-registry.Register(plugins.NewMyPlugin())
+go test -v ./test/integration -run TestBackupCommand
 ```
 
 ## Architecture
 
-### Package Structure
-
-- `cmd/owuiback/` - Main application entry point
-- `pkg/openwebui/` - Open WebUI API client and data models
-- `pkg/backup/` - Backup logic and ZIP creation
-- `pkg/restore/` - Restore logic and ZIP extraction
-- `pkg/config/` - Configuration management
-- `pkg/plugin/` - Plugin system interface
-- `plugins/` - Individual command plugins
-- `test/integration/` - Integration tests
-
-### Key Components
-
-**API Client** (`pkg/openwebui/client.go`):
-- HTTP client for Open WebUI API
-- Authentication handling
-- Request/response processing
-- Error handling
-
-**Backup Engine** (`pkg/backup/backup.go`):
-- ZIP file creation
-- Metadata generation
-- File organization
-- Individual and unified backup logic
-
-**Restore Engine** (`pkg/restore/restore.go`):
-- ZIP file extraction
-- Format detection (unified vs legacy)
-- Item creation/update
-- Overwrite logic
-- Idempotent operation handling
-
-**Data Models** (`pkg/openwebui/models.go`):
-- Go structs for all Open WebUI data types
-- JSON serialization/deserialization
-- Metadata structures
-
-## Troubleshooting
-
-### Common Issues
-
-**"API key is required"**
-- Set `OPEN_WEBUI_API_KEY` environment variable
-- Verify the API key is valid
-
-**"Failed to connect to Open WebUI"**
-- Check `OPEN_WEBUI_URL` is correct
-- Verify Open WebUI is running
-- Check network connectivity
-
-**"File already exists"**
-- Backup files are not overwritten by default
-- Use different output directory or remove old backups
-- Restore operations use `--overwrite` flag
-
-**"Knowledge base already exists" (without --overwrite)**
-- This is expected behavior - existing items are skipped
-- Use `--overwrite` flag to replace existing items
-
-**"Failed to upload file"**
-- Check file size limits in Open WebUI
-- Verify available storage space
-- Check network stability
-
-### Debug Mode
-
-Set log level for detailed output:
-```bash
-export LOG_LEVEL=debug
-./owuiback backup-all --dir ./backups
-```
-
-## Version History
-
-### v0.3.0 (Current)
-- ✅ Added unified backup format (single ZIP for all data)
-- ✅ Added backup metadata (`owui.json`) to all backups
-- ✅ Added support for tools, prompts, and files
-- ✅ Refactored backup-all to create unified ZIP
-- ✅ Added format detection to restore-all (unified vs legacy)
-- ✅ Added comprehensive integration tests
-- ✅ Backward compatibility with legacy separate ZIPs
-
-### v0.2.0
-- ✅ Added model backup and restore
-- ✅ Improved knowledge base handling
-- ✅ Added plugin architecture
-
-### v0.1.0
-- ✅ Initial release
-- ✅ Knowledge base backup and restore
+- **2 Unified Commands**: backup, restore
+- **Selective Type Filtering**: Optional flags for specific data types
+- **Mandatory Encryption**: age public key cryptography
+- **Plugin System**: Extensible architecture for future features
+- **Stateless**: No local database, operates directly on API
 
 ## License
 
@@ -708,8 +575,7 @@ See LICENSE file for details.
 
 ## Contributing
 
-Contributions are welcome! Please:
-
+Contributions welcome! Please:
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
@@ -718,7 +584,12 @@ Contributions are welcome! Please:
 
 ## Support
 
-For issues and questions:
-- Open an issue on GitHub
-- Check existing issues for solutions
-- Refer to integration test examples in `test/integration/`
+- GitHub Issues: Report bugs and request features
+- Documentation: Check this README and memory-bank/
+- Examples: See usage examples above
+
+## Version
+
+Current: **v2.0.0** (Major architectural refactor)
+
+See [CHANGELOG](CHANGELOG.md) for version history and release notes.

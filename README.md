@@ -4,9 +4,10 @@ A secure CLI tool for backing up and restoring data from Open WebUI instances wi
 
 ## Features
 
-- **Unified Commands** - Simple backup/restore with optional type filtering
+- **Unified Commands** - Simple backup/restore/purge with optional type filtering
+- **Safe Data Deletion** - Purge command with dry-run mode and confirmation prompts
 - **Mandatory Encryption** - All backups secured with age public key cryptography
-- **Selective Backup/Restore** - Choose specific data types (knowledge, models, tools, prompts, files)
+- **Selective Operations** - Choose specific data types for backup/restore/purge
 - **Team Workflows** - Multi-recipient encryption for shared access
 - **Environment-based Configuration** - Secure credential management
 - **Cross-platform** - Binaries for Linux, macOS, Windows (amd64/arm64)
@@ -158,6 +159,63 @@ owuiback restore --file INPUT_FILE [OPTIONS]
 ./owuiback restore --file ./backups/team.zip.age \
     --decrypt-identity ./alice_identity.txt
 ```
+
+### purge
+
+Safely delete data from Open WebUI with dry-run and confirmation.
+
+```bash
+owuiback purge [OPTIONS]
+```
+
+**Optional Flags:**
+- `--force`, `-f` - Actually perform deletion (required for actual deletion)
+
+**Selective Type Flags (optional, default: all types in dry-run):**
+- `--chats` - Purge only chats
+- `--files` - Purge only files
+- `--models` - Purge only models
+- `--knowledge` - Purge only knowledge bases
+- `--prompts` - Purge only prompts
+- `--tools` - Purge only tools
+- `--functions` - Purge only functions
+- `--memories` - Purge only memories
+- `--feedbacks` - Purge only feedbacks
+
+**Default Behavior:**
+- Without `--force`: Shows what would be deleted (dry-run mode)
+- With `--force`: Prompts for confirmation, then deletes
+- No type flags: Targets all types
+- With type flags: Targets only specified types
+
+**Examples:**
+```bash
+# Dry-run (shows what would be deleted)
+./owuiback purge
+
+# Dry-run for specific types
+./owuiback purge --chats --files
+
+# Force deletion (requires typing "yes" to confirm)
+./owuiback purge --force
+
+# Force deletion of specific types
+./owuiback purge --chats --force
+./owuiback purge --knowledge --models --force
+```
+
+**Safety Mechanisms:**
+1. **Dry-run by Default** - Without `--force`, only shows counts
+2. **Force Flag Required** - Must explicitly use `--force` for deletion
+3. **Confirmation Prompt** - Must type "yes" to proceed
+4. **Clear Warning** - Shows ⚠️  WARNING before deletion
+5. **Item Counts** - Displays exactly what will be deleted
+
+**Use Cases:**
+- Clean test environments
+- Remove all data before migration
+- Delete specific data types (e.g., old chats)
+- Prepare instance for fresh start
 
 ## Encryption
 
@@ -514,10 +572,11 @@ export OWUI_DECRYPT_IDENTITY="/path/to/identity.txt"
 
 ### Key Differences
 
-1. **Commands**: 12 commands → 2 commands with type flags
+1. **Commands**: 12 commands → 3 commands (backup, restore, purge)
 2. **Encryption**: Optional → Mandatory (always encrypted)
 3. **Modes**: Passphrase + Public key → Public key only
 4. **Flags**: `--dir` → `--out` (backup) / `--file` (restore)
+5. **New**: Purge command for safe data deletion
 
 ### Compatibility
 
@@ -563,9 +622,10 @@ go test -v ./test/integration -run TestBackupCommand
 
 ## Architecture
 
-- **2 Unified Commands**: backup, restore
+- **3 Unified Commands**: backup, restore, purge
 - **Selective Type Filtering**: Optional flags for specific data types
 - **Mandatory Encryption**: age public key cryptography
+- **Purge Safety**: Dry-run by default, force mode with confirmation
 - **Plugin System**: Extensible architecture for future features
 - **Stateless**: No local database, operates directly on API
 

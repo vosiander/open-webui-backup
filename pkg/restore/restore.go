@@ -19,6 +19,7 @@ type SelectiveRestoreOptions struct {
 	Tools     bool
 	Prompts   bool
 	Files     bool
+	Chats     bool
 }
 
 // RestoreKnowledge restores a knowledge base from a backup ZIP file
@@ -903,6 +904,68 @@ func extractPromptFromZip(zipPath string) (*openwebui.Prompt, error) {
 	return nil, fmt.Errorf("prompt.json not found in ZIP file")
 }
 
+// RestoreChat restores a chat from a backup ZIP file
+// If overwrite is true, existing chat with same ID will be replaced
+func RestoreChat(client *openwebui.Client, zipPath string, overwrite bool) error {
+	logrus.Infof("Starting chat restore from: %s", zipPath)
+
+	// Extract chat from ZIP
+	chat, err := extractChatFromZip(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to extract chat from ZIP: %w", err)
+	}
+
+	logrus.Infof("Extracted chat: %s (ID: %s)", chat.Title, chat.ID)
+
+	// Check if chat already exists by ID
+	existingChat, err := client.GetChatByID(chat.ID)
+	if err == nil && existingChat != nil && !overwrite {
+		return fmt.Errorf("chat with ID %s already exists (use --overwrite to replace)", chat.ID)
+	}
+
+	// Import the chat
+	logrus.Infof("Importing chat: %s", chat.Title)
+	if err := client.ImportChat(chat); err != nil {
+		return fmt.Errorf("failed to import chat: %w", err)
+	}
+
+	logrus.Infof("Successfully restored chat: %s", chat.Title)
+	return nil
+}
+
+// extractChatFromZip extracts the chat.json from the ZIP file root
+func extractChatFromZip(zipPath string) (*openwebui.Chat, error) {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open ZIP file: %w", err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if f.Name == "chat.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open chat.json: %w", err)
+			}
+
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read chat.json: %w", err)
+			}
+
+			var chat openwebui.Chat
+			if err := json.Unmarshal(data, &chat); err != nil {
+				return nil, fmt.Errorf("failed to parse chat.json: %w", err)
+			}
+
+			return &chat, nil
+		}
+	}
+
+	return nil, fmt.Errorf("chat.json not found in ZIP file")
+}
+
 // RestoreFile restores a file from a backup ZIP file
 // If overwrite is true, existing file with same ID will be replaced
 func RestoreFile(client *openwebui.Client, zipPath string, overwrite bool) error {
@@ -1012,7 +1075,7 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	logrus.Info("Starting selective restore...")
 
 	// Validate that at least one option is enabled
-	if !options.Knowledge && !options.Models && !options.Tools && !options.Prompts && !options.Files {
+	if !options.Knowledge && !options.Models && !options.Tools && !options.Prompts && !options.Files && !options.Chats {
 		return fmt.Errorf("at least one data type must be selected for restore")
 	}
 
@@ -1108,6 +1171,17 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 			}
 		} else {
 			logrus.Info("Files not present in backup, skipping")
+		}
+	}
+
+	if options.Chats {
+		if contains(metadata.ContainedTypes, "chat") {
+			logrus.Info("Restoring chats...")
+			if err := restoreChatsFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some chats: %v", err)
+			}
+		} else {
+			logrus.Info("Chats not present in backup, skipping")
 		}
 	}
 
@@ -1258,6 +1332,11 @@ func restoreFromUnifiedBackup(client *openwebui.Client, zipPath string, overwrit
 			if err := restoreFilesFromUnified(r, client, overwrite); err != nil {
 				logrus.Warnf("Failed to restore some files: %v", err)
 			}
+		case "chat":
+			logrus.Info("Restoring chats from unified backup...")
+			if err := restoreChatsFromUnified(r, client, overwrite); err != nil {
+				logrus.Warnf("Failed to restore some chats: %v", err)
+			}
 		}
 	}
 
@@ -1267,7 +1346,7 @@ func restoreFromUnifiedBackup(client *openwebui.Client, zipPath string, overwrit
 
 // restoreFromLegacyBackups restores from legacy separate ZIP files
 func restoreFromLegacyBackups(client *openwebui.Client, files []string, overwrite bool) error {
-	var modelFiles, kbFiles, toolFiles, promptFiles, fileFiles []string
+	var modelFiles, kbFiles, toolFiles, promptFiles, fileFiles, chatFiles []string
 
 	for _, file := range files {
 		basename := filepath.Base(file)
@@ -1281,10 +1360,12 @@ func restoreFromLegacyBackups(client *openwebui.Client, files []string, overwrit
 			promptFiles = append(promptFiles, file)
 		} else if strings.Contains(basename, "_file_") {
 			fileFiles = append(fileFiles, file)
+		} else if strings.Contains(basename, "_chat_") {
+			chatFiles = append(chatFiles, file)
 		}
 	}
 
-	totalFiles := len(modelFiles) + len(kbFiles) + len(toolFiles) + len(promptFiles) + len(fileFiles)
+	totalFiles := len(modelFiles) + len(kbFiles) + len(toolFiles) + len(promptFiles) + len(fileFiles) + len(chatFiles)
 	logrus.Infof("Found %d backup file(s) to restore", totalFiles)
 
 	// Restore in order: models, KBs, tools, prompts, files
@@ -1333,6 +1414,16 @@ func restoreFromLegacyBackups(client *openwebui.Client, files []string, overwrit
 		for i, file := range fileFiles {
 			logrus.Infof("  %d/%d: %s", i+1, len(fileFiles), filepath.Base(file))
 			if err := RestoreFile(client, file, overwrite); err != nil {
+				logrus.Warnf("  Failed: %v", err)
+			}
+		}
+	}
+
+	if len(chatFiles) > 0 {
+		logrus.Infof("Restoring %d chat(s)...", len(chatFiles))
+		for i, file := range chatFiles {
+			logrus.Infof("  %d/%d: %s", i+1, len(chatFiles), filepath.Base(file))
+			if err := RestoreChat(client, file, overwrite); err != nil {
 				logrus.Warnf("  Failed: %v", err)
 			}
 		}
@@ -1579,6 +1670,53 @@ func restoreFilesFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwr
 			logrus.Infof("  Restoring file: %s", fileExport.Meta.Name)
 			fileExport.Data.Content = string(fileContent)
 			client.CreateFileFromExport(fileExport)
+		}
+	}
+	return nil
+}
+
+func restoreChatsFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwrite bool) error {
+	chatDirs := make(map[string]bool)
+	for _, f := range r.File {
+		if strings.HasPrefix(f.Name, "chats/") {
+			parts := strings.Split(f.Name, "/")
+			if len(parts) >= 2 {
+				chatDirs[parts[1]] = true
+			}
+		}
+	}
+
+	for chatID := range chatDirs {
+		chatPath := fmt.Sprintf("chats/%s/chat.json", chatID)
+		for _, f := range r.File {
+			if f.Name == chatPath {
+				rc, err := f.Open()
+				if err != nil {
+					continue
+				}
+				data, err := io.ReadAll(rc)
+				rc.Close()
+				if err != nil {
+					continue
+				}
+
+				var chat openwebui.Chat
+				if err := json.Unmarshal(data, &chat); err != nil {
+					continue
+				}
+
+				// Check if exists
+				existingChat, err := client.GetChatByID(chat.ID)
+				if err == nil && existingChat != nil && !overwrite {
+					logrus.Infof("  Chat %s already exists, skipping", chat.Title)
+					continue
+				}
+
+				logrus.Infof("  Restoring chat: %s", chat.Title)
+				if err := client.ImportChat(&chat); err != nil {
+					logrus.Warnf("  Failed to restore chat %s: %v", chat.Title, err)
+				}
+			}
 		}
 	}
 	return nil

@@ -22,6 +22,7 @@ type SelectiveBackupOptions struct {
 	Tools     bool
 	Prompts   bool
 	Files     bool
+	Chats     bool
 }
 
 // BackupKnowledge is the main entry point for backing up all knowledge bases
@@ -690,13 +691,133 @@ func backupSingleFile(fileID string, client *openwebui.Client, outputDir string)
 	return nil
 }
 
+// BackupChats is the main entry point for backing up all chats
+func BackupChats(client *openwebui.Client, outputDir string) error {
+	// Ensure output directory exists
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	logrus.Info("Fetching chats...")
+	chats, err := client.GetAllChats()
+	if err != nil {
+		return fmt.Errorf("failed to get chats: %w", err)
+	}
+
+	if len(chats) == 0 {
+		logrus.Info("No chats found")
+		return nil
+	}
+
+	logrus.Infof("Found %d chat(s)", len(chats))
+
+	// Backup each chat
+	for i, chat := range chats {
+		logrus.Infof("Backing up chat %d/%d: %s", i+1, len(chats), chat.Title)
+		if err := backupSingleChat(&chat, client, outputDir); err != nil {
+			logrus.Warnf("Failed to backup chat '%s': %v", chat.Title, err)
+			continue
+		}
+	}
+
+	logrus.Info("All chats backed up successfully")
+	return nil
+}
+
+// backupSingleChat backs up a single chat to a ZIP file
+func backupSingleChat(chat *openwebui.Chat, client *openwebui.Client, outputDir string) error {
+	// Generate ZIP filename
+	timestamp := time.Now().UTC().Format("20060102_150405")
+	sanitizedTitle := sanitizeFilename(chat.Title)
+	zipFilename := fmt.Sprintf("%s_chat_%s.zip", timestamp, sanitizedTitle)
+	zipPath := filepath.Join(outputDir, zipFilename)
+
+	// Check if file already exists
+	if _, err := os.Stat(zipPath); err == nil {
+		return &openwebui.FileExistsError{Path: zipPath}
+	}
+
+	// Create ZIP archive
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to create zip file: %w", err)
+	}
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// Add chat.json
+	chatJSON, err := json.MarshalIndent(chat, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal chat: %w", err)
+	}
+
+	chatFile, err := zipWriter.Create("chat.json")
+	if err != nil {
+		return fmt.Errorf("failed to create chat.json in zip: %w", err)
+	}
+	if _, err := chatFile.Write(chatJSON); err != nil {
+		return fmt.Errorf("failed to write chat.json: %w", err)
+	}
+
+	// Add owui.json metadata
+	metadata := generateMetadata(client, "chat", 1, false, nil)
+	if err := writeMetadataToZip(zipWriter, metadata); err != nil {
+		logrus.Warnf("  Failed to write metadata: %v", err)
+	}
+
+	logrus.Infof("  Created: %s", zipFilename)
+	return nil
+}
+
+// backupAllChats backs up all chats into the unified ZIP
+func backupAllChats(zipWriter *zip.Writer, client *openwebui.Client) (int, error) {
+	chats, err := client.GetAllChats()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get chats: %w", err)
+	}
+
+	for i, chat := range chats {
+		logrus.Infof("  Backing up chat %d/%d: %s", i+1, len(chats), chat.Title)
+		if err := backupChatToZip(zipWriter, &chat); err != nil {
+			logrus.Warnf("  Failed to backup chat '%s': %v", chat.Title, err)
+			continue
+		}
+	}
+
+	return len(chats), nil
+}
+
+// backupChatToZip backs up a single chat into an existing ZIP writer
+func backupChatToZip(zipWriter *zip.Writer, chat *openwebui.Chat) error {
+	// Create chats/{id}/ directory
+	chatDir := fmt.Sprintf("chats/%s/", chat.ID)
+
+	// Add chat.json
+	chatJSON, err := json.MarshalIndent(chat, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal chat: %w", err)
+	}
+
+	chatFile, err := zipWriter.Create(chatDir + "chat.json")
+	if err != nil {
+		return fmt.Errorf("failed to create chat.json in zip: %w", err)
+	}
+	if _, err := chatFile.Write(chatJSON); err != nil {
+		return fmt.Errorf("failed to write chat.json: %w", err)
+	}
+
+	return nil
+}
+
 // BackupSelective performs a selective backup based on the provided options
 // outputFile should be the full path to the output ZIP file
 func BackupSelective(client *openwebui.Client, outputFile string, options *SelectiveBackupOptions) error {
 	logrus.Info("Starting selective backup...")
 
 	// Validate that at least one option is enabled
-	if !options.Knowledge && !options.Models && !options.Tools && !options.Prompts && !options.Files {
+	if !options.Knowledge && !options.Models && !options.Tools && !options.Prompts && !options.Files && !options.Chats {
 		return fmt.Errorf("at least one data type must be selected for backup")
 	}
 
@@ -782,6 +903,19 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 			containedTypes = append(containedTypes, "file")
 			totalItems += fileCount
 			logrus.Infof("  Backed up %d file(s)", fileCount)
+		}
+	}
+
+	if options.Chats {
+		logrus.Info("Backing up chats...")
+		chatCount, err := backupAllChats(zipWriter, client)
+		if err != nil {
+			logrus.Warnf("Failed to backup some chats: %v", err)
+		}
+		if chatCount > 0 {
+			containedTypes = append(containedTypes, "chat")
+			totalItems += chatCount
+			logrus.Infof("  Backed up %d chat(s)", chatCount)
 		}
 	}
 
@@ -884,7 +1018,7 @@ func BackupAll(client *openwebui.Client, outputDir string) error {
 	}
 
 	// Step 5: Backup files
-	logrus.Info("Step 5/5: Backing up files...")
+	logrus.Info("Step 5/6: Backing up files...")
 	fileCount, err := backupAllFiles(zipWriter, client)
 	if err != nil {
 		logrus.Warnf("Failed to backup some files: %v", err)
@@ -893,6 +1027,18 @@ func BackupAll(client *openwebui.Client, outputDir string) error {
 		containedTypes = append(containedTypes, "file")
 		totalItems += fileCount
 		logrus.Infof("  Backed up %d file(s)", fileCount)
+	}
+
+	// Step 6: Backup chats
+	logrus.Info("Step 6/6: Backing up chats...")
+	chatCount, err := backupAllChats(zipWriter, client)
+	if err != nil {
+		logrus.Warnf("Failed to backup some chats: %v", err)
+	}
+	if chatCount > 0 {
+		containedTypes = append(containedTypes, "chat")
+		totalItems += chatCount
+		logrus.Infof("  Backed up %d chat(s)", chatCount)
 	}
 
 	// Add unified metadata

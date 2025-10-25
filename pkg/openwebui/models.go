@@ -191,14 +191,71 @@ type FileExport struct {
 	UpdatedAt     int64                  `json:"updated_at"`
 }
 
+// Chat represents a chat conversation from the Open WebUI API
+type Chat struct {
+	ID        string                 `json:"id"`
+	UserID    string                 `json:"user_id"`
+	Title     string                 `json:"title"`
+	Chat      ChatMessages           `json:"chat"` // Array of messages
+	Meta      map[string]interface{} `json:"meta,omitempty"`
+	CreatedAt int64                  `json:"created_at"`
+	UpdatedAt int64                  `json:"updated_at"`
+}
+
+// ChatMessages represents the messages array in a chat
+type ChatMessages struct {
+	Messages []Message `json:"messages"`
+}
+
+// Message represents a single message in a chat
+type Message struct {
+	ID          string                 `json:"id,omitempty"`
+	ParentID    *string                `json:"parentId,omitempty"`
+	ChildrenIDs []string               `json:"childrenIds,omitempty"`
+	Role        string                 `json:"role"`
+	Content     string                 `json:"content"`
+	Model       string                 `json:"model,omitempty"`
+	Timestamp   int64                  `json:"timestamp,omitempty"`
+	Meta        map[string]interface{} `json:"meta,omitempty"`
+}
+
+// Function represents a function from the Open WebUI API
+type Function struct {
+	ID        string       `json:"id"`
+	UserID    string       `json:"user_id"`
+	Name      string       `json:"name"`
+	Type      string       `json:"type"`
+	Content   string       `json:"content"`
+	Meta      FunctionMeta `json:"meta"`
+	IsActive  bool         `json:"is_active"`
+	IsGlobal  bool         `json:"is_global"`
+	UpdatedAt int64        `json:"updated_at"`
+	CreatedAt int64        `json:"created_at"`
+}
+
+// FunctionMeta contains function-specific metadata
+type FunctionMeta struct {
+	Description string                 `json:"description,omitempty"`
+	Manifest    map[string]interface{} `json:"manifest,omitempty"`
+}
+
+// Memory represents a memory from the Open WebUI API
+type Memory struct {
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	Content   string `json:"content"`
+	UpdatedAt int64  `json:"updated_at"`
+	CreatedAt int64  `json:"created_at"`
+}
+
 // BackupMetadata contains information about the backup
 type BackupMetadata struct {
 	OpenWebUIURL      string   `json:"open_webui_url"`
 	OpenWebUIVersion  string   `json:"open_webui_version,omitempty"`
 	BackupToolVersion string   `json:"backup_tool_version"`
 	BackupTimestamp   string   `json:"backup_timestamp"`
-	BackupType        string   `json:"backup_type"` // "knowledge", "model", "tool", "prompt", "file", "all"
+	BackupType        string   `json:"backup_type"` // "knowledge", "model", "tool", "prompt", "file", "chat", "all"
 	ItemCount         int      `json:"item_count"`
 	UnifiedBackup     bool     `json:"unified_backup"`            // true for backup-all
-	ContainedTypes    []string `json:"contained_types,omitempty"` // ["knowledge", "model", "tool", "prompt", "file"]
+	ContainedTypes    []string `json:"contained_types,omitempty"` // ["knowledge", "model", "tool", "prompt", "file", "chat"]
 }

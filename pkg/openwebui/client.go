@@ -502,6 +502,366 @@ func (c *Client) CreateFileFromExport(file *FileExport) error {
 	return err
 }
 
+// GetAllChats fetches all chats from /api/v1/chats/all
+func (c *Client) GetAllChats() ([]Chat, error) {
+	resp, err := c.doRequest("GET", "/api/v1/chats/all", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var chats []Chat
+	if err := json.NewDecoder(resp.Body).Decode(&chats); err != nil {
+		return nil, fmt.Errorf("failed to decode chats response: %w", err)
+	}
+
+	return chats, nil
+}
+
+// GetChatByID fetches a specific chat by ID
+func (c *Client) GetChatByID(id string) (*Chat, error) {
+	path := fmt.Sprintf("/api/v1/chats/%s", id)
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var chat Chat
+	if err := json.NewDecoder(resp.Body).Decode(&chat); err != nil {
+		return nil, fmt.Errorf("failed to decode chat response: %w", err)
+	}
+
+	return &chat, nil
+}
+
+// ImportChat imports a chat via /api/v1/chats/import
+func (c *Client) ImportChat(chat *Chat) error {
+	jsonData, err := json.Marshal(chat)
+	if err != nil {
+		return fmt.Errorf("failed to marshal chat: %w", err)
+	}
+
+	resp, err := c.doRequest("POST", "/api/v1/chats/import", bytes.NewReader(jsonData))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// DeleteAllChats deletes all user chats
+func (c *Client) DeleteAllChats() error {
+	resp, err := c.doRequest("DELETE", "/api/v1/chats/", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// DeleteChatByID deletes a specific chat by ID
+func (c *Client) DeleteChatByID(id string) error {
+	path := fmt.Sprintf("/api/v1/chats/%s", id)
+	resp, err := c.doRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// DeleteAllFiles deletes all files
+func (c *Client) DeleteAllFiles() error {
+	resp, err := c.doRequest("DELETE", "/api/v1/files/all", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// DeleteAllModels deletes all models
+func (c *Client) DeleteAllModels() error {
+	resp, err := c.doRequest("DELETE", "/api/v1/models/delete/all", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// DeleteKnowledgeByID deletes a specific knowledge base by ID
+func (c *Client) DeleteKnowledgeByID(id string) error {
+	path := fmt.Sprintf("/api/v1/knowledge/%s/delete", id)
+	resp, err := c.doRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// DeletePromptByCommand deletes a specific prompt by command
+func (c *Client) DeletePromptByCommand(command string) error {
+	path := fmt.Sprintf("/api/v1/prompts/command/%s/delete", command)
+	resp, err := c.doRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// ListTools fetches all tools from /api/v1/tools/
+func (c *Client) ListTools() ([]Tool, error) {
+	resp, err := c.doRequest("GET", "/api/v1/tools/", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var tools []Tool
+	if err := json.NewDecoder(resp.Body).Decode(&tools); err != nil {
+		return nil, fmt.Errorf("failed to decode tools response: %w", err)
+	}
+
+	return tools, nil
+}
+
+// DeleteToolByID deletes a specific tool by ID
+func (c *Client) DeleteToolByID(id string) error {
+	path := fmt.Sprintf("/api/v1/tools/id/%s/delete", id)
+	resp, err := c.doRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// ListFunctions fetches all functions from /api/v1/functions/export
+func (c *Client) ListFunctions() ([]Function, error) {
+	resp, err := c.doRequest("GET", "/api/v1/functions/export", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var functions []Function
+	if err := json.NewDecoder(resp.Body).Decode(&functions); err != nil {
+		return nil, fmt.Errorf("failed to decode functions response: %w", err)
+	}
+
+	return functions, nil
+}
+
+// DeleteFunctionByID deletes a specific function by ID
+func (c *Client) DeleteFunctionByID(id string) error {
+	path := fmt.Sprintf("/api/v1/functions/id/%s/delete", id)
+	resp, err := c.doRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// ListMemories fetches all memories from /api/v1/memories/
+func (c *Client) ListMemories() ([]Memory, error) {
+	resp, err := c.doRequest("GET", "/api/v1/memories/", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var memories []Memory
+	if err := json.NewDecoder(resp.Body).Decode(&memories); err != nil {
+		return nil, fmt.Errorf("failed to decode memories response: %w", err)
+	}
+
+	return memories, nil
+}
+
+// DeleteMemoryByID deletes a specific memory by ID
+func (c *Client) DeleteMemoryByID(id string) error {
+	path := fmt.Sprintf("/api/v1/memories/%s", id)
+	resp, err := c.doRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// DeleteAllMemories deletes all user memories
+func (c *Client) DeleteAllMemories() error {
+	resp, err := c.doRequest("DELETE", "/api/v1/memories/delete/user", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// DeleteAllFeedbacks deletes all feedbacks
+func (c *Client) DeleteAllFeedbacks() error {
+	resp, err := c.doRequest("DELETE", "/api/v1/evaluations/feedbacks/all", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
 // doRequest makes an authenticated HTTP request to the API
 func (c *Client) doRequest(method, path string, body io.Reader) (*http.Response, error) {
 	url := c.baseURL + path

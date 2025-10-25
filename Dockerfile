@@ -18,8 +18,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o owuiback cmd/owuiback/main.go
 # Runtime stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS
-RUN apk --no-cache add ca-certificates
+# Install ca-certificates for HTTPS and age for encryption
+RUN apk --no-cache add ca-certificates age
 
 WORKDIR /root/
 

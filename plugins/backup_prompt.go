@@ -5,12 +5,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/vosiander/open-webui-backup/pkg/backup"
 	"github.com/vosiander/open-webui-backup/pkg/config"
+	"github.com/vosiander/open-webui-backup/pkg/encryption"
 	"github.com/vosiander/open-webui-backup/pkg/openwebui"
 )
 
 // BackupPromptPlugin implements the Plugin interface for backing up prompts
 type BackupPromptPlugin struct {
-	dir string
+	dir              string
+	encrypt          bool
+	encryptRecipient []string
 }
 
 // NewBackupPromptPlugin creates a new BackupPromptPlugin
@@ -32,6 +35,8 @@ func (p *BackupPromptPlugin) Description() string {
 func (p *BackupPromptPlugin) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&p.dir, "dir", "d", "", "Directory for backup/restore files (required)")
 	cmd.MarkFlagRequired("dir")
+	cmd.Flags().BoolVar(&p.encrypt, "encrypt", false, "Encrypt backup with passphrase (interactive)")
+	cmd.Flags().StringSliceVar(&p.encryptRecipient, "encrypt-recipient", nil, "Encrypt backup with age public key(s)")
 }
 
 // Execute runs the backup prompt command
@@ -54,6 +59,19 @@ func (p *BackupPromptPlugin) Execute(cfg *config.Config) error {
 	// Perform backup
 	if err := backup.BackupPrompts(client, p.dir); err != nil {
 		logrus.Fatalf("backup failed: %w", err)
+	}
+
+	// Handle encryption if requested
+	if p.encrypt || len(p.encryptRecipient) > 0 {
+		backupFile, err := encryption.FindLatestBackup(p.dir, "*_prompt_*.zip")
+		if err != nil || backupFile == "" {
+			logrus.Fatalf("Failed to find backup dir for encryption")
+		}
+
+		_, err = encryption.EncryptBackupFile(backupFile, p.encrypt, p.encryptRecipient)
+		if err != nil {
+			logrus.Fatalf("Failed to encrypt backup: %v", err)
+		}
 	}
 
 	logrus.Info("Backup completed successfully!")

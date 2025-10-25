@@ -225,6 +225,213 @@ Each backup type can be restored individually with the same `--overwrite` flag b
 ./owuiback restore-file --dir ./backups/20251024_220315_files.zip --overwrite
 ```
 
+## Encryption
+
+All backup operations support optional encryption using [age](https://age-encryption.org/) - a modern, secure file encryption tool. Encrypted backups are protected with either a passphrase or public key cryptography.
+
+### Why Encrypt Backups?
+
+- **Security**: Protect sensitive data (knowledge bases, prompts, API configurations)
+- **Compliance**: Meet data protection requirements
+- **Trust**: Safely store backups in cloud storage or shared locations
+
+### Encryption Modes
+
+#### 1. Passphrase-Based Encryption (Recommended for Personal Use)
+
+The simplest method - encrypt with a passphrase, decrypt with the same passphrase.
+
+**Backup with encryption:**
+```bash
+export OPEN_WEBUI_URL="https://myinstance.com"
+export OPEN_WEBUI_API_KEY="sk-xxx"
+
+# Unified backup with encryption
+./owuiback backup-all --dir ./backups --encrypt
+Enter passphrase: ****************
+Confirm passphrase: ****************
+✓ Backup created: backups/20251024_220315_owui_full_backup.zip.age
+```
+
+**Restore with decryption:**
+```bash
+./owuiback restore-all --dir ./backups/20251024_220315_owui_full_backup.zip.age --decrypt
+Enter passphrase: ****************
+✓ Backup decrypted successfully
+✓ Restored 42 items
+```
+
+**Individual backup types with encryption:**
+```bash
+# Knowledge base
+./owuiback backup-knowledge --dir ./backups --encrypt
+
+# Models
+./owuiback backup-model --dir ./backups --encrypt
+
+# Tools
+./owuiback backup-tool --dir ./backups --encrypt
+
+# Prompts
+./owuiback backup-prompt --dir ./backups --encrypt
+
+# Files
+./owuiback backup-file --dir ./backups --encrypt
+```
+
+#### 2. Public Key Encryption (Recommended for Teams/Automation)
+
+Use asymmetric cryptography - encrypt with a public key, decrypt with the private key. Perfect for:
+- Team environments (multiple people can decrypt)
+- Automated backups (no interactive passphrase)
+- Key rotation and access control
+
+**Generate age key pair:**
+```bash
+# Generate new identity (private key)
+age-keygen -o ~/.age/identity.txt
+Public key: age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+
+# Extract public key (recipient)
+age-keygen -y ~/.age/identity.txt > ~/.age/recipient.txt
+```
+
+**Backup with recipient (public key):**
+```bash
+# Using public key directly
+./owuiback backup-all --dir ./backups --encrypt-recipient age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+
+# Or from file
+./owuiback backup-all --dir ./backups --encrypt-recipient $(cat ~/.age/recipient.txt)
+✓ Backup created: backups/20251024_220315_owui_full_backup.zip.age
+```
+
+**Restore with identity (private key):**
+```bash
+./owuiback restore-all --dir ./backups/20251024_220315_owui_full_backup.zip.age \
+    --decrypt-identity ~/.age/identity.txt
+✓ Backup decrypted successfully
+✓ Restored 42 items
+```
+
+**Team example - Multiple recipients:**
+```bash
+# Generate keys for each team member
+age-keygen -o alice_identity.txt
+age-keygen -o bob_identity.txt
+
+# Encrypt for multiple recipients
+./owuiback backup-all --dir ./backups \
+    --encrypt-recipient $(age-keygen -y alice_identity.txt) \
+    --encrypt-recipient $(age-keygen -y bob_identity.txt)
+
+# Either Alice or Bob can decrypt
+./owuiback restore-all --dir backups/backup.zip.age --decrypt-identity alice_identity.txt
+# OR
+./owuiback restore-all --dir backups/backup.zip.age --decrypt-identity bob_identity.txt
+```
+
+### Encrypted File Format
+
+Encrypted backups use the `.age` extension:
+
+**Unencrypted:**
+```
+20251024_220315_owui_full_backup.zip        (plaintext)
+```
+
+**Encrypted:**
+```
+20251024_220315_owui_full_backup.zip.age    (age-encrypted)
+```
+
+The tool automatically detects encrypted files and prompts for credentials during restore.
+
+### Encryption Flags
+
+**Backup commands:**
+- `--encrypt`: Prompt for passphrase (interactive)
+- `--encrypt-recipient <key>`: Encrypt with public key (can be used multiple times)
+
+**Restore commands:**
+- `--decrypt`: Prompt for passphrase (interactive)
+- `--decrypt-identity <file>`: Path to age identity file (private key, can be used multiple times)
+
+### Environment Variables (Optional)
+
+For automation scenarios, credentials can be provided via environment variables:
+
+```bash
+# Passphrase mode (use with caution)
+export OWUI_ENCRYPT_PASSPHRASE="my-secure-passphrase"
+./owuiback backup-all --dir ./backups --encrypt
+
+# Public key mode (safer for automation)
+export OWUI_ENCRYPT_RECIPIENT="age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+export OWUI_DECRYPT_IDENTITY="/path/to/identity.txt"
+./owuiback backup-all --dir ./backups --encrypt
+./owuiback restore-all --dir ./backups/backup.zip.age --decrypt
+```
+
+⚠️ **Security Note**: Avoid storing passphrases in environment variables in production. Use identity files or interactive prompts instead.
+
+### Security Best Practices
+
+1. **Use Strong Passphrases**: Minimum 12 characters, mix of letters, numbers, symbols
+2. **Protect Identity Files**: Set proper permissions (`chmod 600 ~/.age/identity.txt`)
+3. **Key Rotation**: Regularly generate new keys for team members
+4. **Backup Keys Securely**: Store identity files in secure locations (password managers, vaults)
+5. **Test Decryption**: Always verify you can decrypt before deleting source data
+6. **Automated Workflows**: Prefer public key mode over passphrase for scripts
+
+### Automated Backup Example
+
+```bash
+#!/bin/bash
+# Automated encrypted backup script
+
+# Configuration
+BACKUP_DIR="/secure/backups"
+RECIPIENT_FILE="/secure/age/recipient.txt"
+IDENTITY_FILE="/secure/age/identity.txt"
+RETENTION_DAYS=30
+
+# Create encrypted backup
+./owuiback backup-all \
+    --dir "$BACKUP_DIR" \
+    --encrypt-recipient "$(cat $RECIPIENT_FILE)"
+
+# Test restore (dry-run)
+LATEST_BACKUP=$(ls -t $BACKUP_DIR/*.age | head -1)
+./owuiback restore-all \
+    --dir "$LATEST_BACKUP" \
+    --decrypt-identity "$IDENTITY_FILE" \
+    2>&1 | grep -q "successfully" && echo "✓ Backup verified"
+
+# Cleanup old backups
+find "$BACKUP_DIR" -name "*.age" -mtime +$RETENTION_DAYS -delete
+```
+
+### Troubleshooting Encryption
+
+**"Failed to decrypt: incorrect passphrase"**
+- Verify you're using the correct passphrase
+- Check for typos (passphrases are case-sensitive)
+
+**"Failed to decrypt: no identity matched"**
+- Ensure identity file path is correct
+- Verify the identity file matches the recipient used for encryption
+- Check identity file permissions
+
+**"age command not found" (Docker)**
+- Ensure using updated Docker image with age support
+- Build with: `docker build -t owuiback:latest .`
+
+**Encrypted backup but forgot passphrase/lost identity**
+- Passphrases cannot be recovered - backups are permanently encrypted
+- Identity files are the only way to decrypt public-key encrypted backups
+- Always backup identity files securely
+
 ## Backup Metadata
 
 Every backup ZIP file (both unified and individual) includes an `owui.json` metadata file at the root. This enables:

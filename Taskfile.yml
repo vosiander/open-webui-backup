@@ -1,5 +1,11 @@
 version: '3'
 
+vars:
+  CURRENT_DIR: { sh: pwd }
+  AGE_FILE_PATH: "{{.CURRENT_DIR}}/"
+  AGE_IDENTITY_FILE: "{{.AGE_FILE_PATH}}/identity.txt"
+  AGE_RECIPIENT_FILE: "{{.AGE_FILE_PATH}}/recipient.txt"
+
 dotenv:
   - .env
 
@@ -8,9 +14,37 @@ tasks:
     desc: Run the owuiback application
     cmd: go run cmd/owuiback/main.go {{.CLI_ARGS}}
 
+  backup-all:
+    desc: Runs backup-all with encryption. Make sure to create an identity first
+    cmd: go run cmd/owuiback/main.go backup-all --dir {{.CURRENT_DIR}}/backups --encrypt-recipient $(cat {{.AGE_RECIPIENT_FILE}})
+
+  restore-all:
+    desc: Restores an encrypted backup file
+    cmd: go run cmd/owuiback/main.go restore-all --dir {{.CURRENT_DIR}}/backups --decrypt-identity {{.AGE_IDENTITY_FILE}}
+
+  decrypt:
+    desc: Uses age to decrypt a file
+    requires:
+      vars:
+        - BACKUP
+        - OUTPUT
+    cmd: age --decrypt -i {{.AGE_IDENTITY_FILE}} -o {{.OUTPUT}} {{.BACKUP}}
+
   bootstrap:
     desc: Install project dependencies
-    cmd: go mod download
+    cmds:
+      - echo "Downloading go modules"
+      - go mod download
+      - go mod tidy
+      - task: new-identity
+
+  new-identity:
+    desc: Generates a new identity
+    cmds:
+      - echo "Generating age secret key"
+      - mkdir -p {{.AGE_FILE_PATH}}
+      - age-keygen -o {{.AGE_IDENTITY_FILE}}
+      - age-keygen -y {{.AGE_IDENTITY_FILE}} > {{.AGE_RECIPIENT_FILE}}
 
   docker-build:
     desc: Build the Docker image

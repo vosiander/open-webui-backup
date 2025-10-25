@@ -5,12 +5,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/vosiander/open-webui-backup/pkg/backup"
 	"github.com/vosiander/open-webui-backup/pkg/config"
+	"github.com/vosiander/open-webui-backup/pkg/encryption"
 	"github.com/vosiander/open-webui-backup/pkg/openwebui"
 )
 
 // BackupFilePlugin implements the Plugin interface for backing up files
 type BackupFilePlugin struct {
-	dir string
+	dir              string
+	encrypt          bool
+	encryptRecipient []string
 }
 
 // NewBackupFilePlugin creates a new BackupFilePlugin
@@ -20,7 +23,7 @@ func NewBackupFilePlugin() *BackupFilePlugin {
 
 // Name returns the command name
 func (p *BackupFilePlugin) Name() string {
-	return "backup-file"
+	return "backup-dir"
 }
 
 // Description returns the command description
@@ -32,9 +35,11 @@ func (p *BackupFilePlugin) Description() string {
 func (p *BackupFilePlugin) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&p.dir, "dir", "d", "", "Directory for backup/restore files (required)")
 	cmd.MarkFlagRequired("dir")
+	cmd.Flags().BoolVar(&p.encrypt, "encrypt", false, "Encrypt backup with passphrase (interactive)")
+	cmd.Flags().StringSliceVar(&p.encryptRecipient, "encrypt-recipient", nil, "Encrypt backup with age public key(s)")
 }
 
-// Execute runs the backup file command
+// Execute runs the backup dir command
 func (p *BackupFilePlugin) Execute(cfg *config.Config) error {
 	logrus.Info("Backing up files from Open WebUI...")
 	logrus.WithField("url", cfg.OpenWebUIURL).Info("Connecting to Open WebUI")
@@ -54,6 +59,19 @@ func (p *BackupFilePlugin) Execute(cfg *config.Config) error {
 	// Perform backup
 	if err := backup.BackupFiles(client, p.dir); err != nil {
 		logrus.Fatalf("backup failed: %w", err)
+	}
+
+	// Handle encryption if requested
+	if p.encrypt || len(p.encryptRecipient) > 0 {
+		backupFile, err := encryption.FindLatestBackup(p.dir, "*_file_*.zip")
+		if err != nil || backupFile == "" {
+			logrus.Fatalf("Failed to find backup dir for encryption")
+		}
+
+		_, err = encryption.EncryptBackupFile(backupFile, p.encrypt, p.encryptRecipient)
+		if err != nil {
+			logrus.Fatalf("Failed to encrypt backup: %v", err)
+		}
 	}
 
 	logrus.Info("Backup completed successfully!")

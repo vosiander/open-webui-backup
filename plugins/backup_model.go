@@ -5,11 +5,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/vosiander/open-webui-backup/pkg/backup"
 	"github.com/vosiander/open-webui-backup/pkg/config"
+	"github.com/vosiander/open-webui-backup/pkg/encryption"
 	"github.com/vosiander/open-webui-backup/pkg/openwebui"
 )
 
 type BackupModelPlugin struct {
-	dir string
+	dir              string
+	encrypt          bool
+	encryptRecipient []string
 }
 
 func NewBackupModelPlugin() *BackupModelPlugin {
@@ -29,6 +32,8 @@ func (p *BackupModelPlugin) Description() string {
 func (p *BackupModelPlugin) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&p.dir, "dir", "d", "", "Directory for backup/restore files (required)")
 	cmd.MarkFlagRequired("dir")
+	cmd.Flags().BoolVar(&p.encrypt, "encrypt", false, "Encrypt backup with passphrase (interactive)")
+	cmd.Flags().StringSliceVar(&p.encryptRecipient, "encrypt-recipient", nil, "Encrypt backup with age public key(s)")
 }
 
 // Execute runs the plugin with the given configuration
@@ -47,6 +52,19 @@ func (p *BackupModelPlugin) Execute(cfg *config.Config) error {
 
 	if err := backup.BackupModels(client, p.dir); err != nil {
 		logrus.Fatalf("Failed to backup models: %v", err)
+	}
+
+	// Handle encryption if requested
+	if p.encrypt || len(p.encryptRecipient) > 0 {
+		backupFile, err := encryption.FindLatestBackup(p.dir, "*_model_*.zip")
+		if err != nil || backupFile == "" {
+			logrus.Fatalf("Failed to find backup dir for encryption")
+		}
+
+		_, err = encryption.EncryptBackupFile(backupFile, p.encrypt, p.encryptRecipient)
+		if err != nil {
+			logrus.Fatalf("Failed to encrypt backup: %v", err)
+		}
 	}
 
 	logrus.Info("Model backup completed successfully")

@@ -34,6 +34,7 @@ func run() error {
 	registry.Register(plugins.NewBackupPlugin())
 	registry.Register(plugins.NewRestorePlugin())
 	registry.Register(plugins.NewPurgePlugin())
+	registry.Register(plugins.NewServePlugin())
 
 	// Create root command
 	rootCmd := &cobra.Command{

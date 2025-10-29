@@ -1,0 +1,239 @@
+<template>
+  <div class="backup-form">
+    <h2>Create Backup</h2>
+    
+    <div v-if="error" class="alert alert-error">
+      {{ error }}
+    </div>
+
+    <div v-if="success" class="alert alert-success">
+      Backup started successfully! Operation ID: {{ operationId }}
+    </div>
+
+    <form @submit.prevent="handleSubmit">
+      <DataTypeSelector v-model="dataTypes" />
+
+      <div class="form-group">
+        <label for="outputFilename">Backup Filename *</label>
+        <input
+          id="outputFilename"
+          v-model="outputFilename"
+          type="text"
+          class="form-input"
+          placeholder="e.g., backup-2025-10-29-21-25.age"
+          required
+        />
+        <small class="form-hint">.age extension will be added automatically if not present</small>
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description (Optional)</label>
+        <input
+          id="description"
+          v-model="description"
+          type="text"
+          class="form-input"
+          placeholder="e.g., Weekly backup before update"
+        />
+      </div>
+
+      <div class="form-actions">
+        <button
+          type="submit"
+          class="btn btn-primary"
+          :disabled="isSubmitting || !hasSelectedTypes"
+        >
+          <span v-if="isSubmitting">Creating Backup...</span>
+          <span v-else>Create Backup</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</template>
+
+<script setup lang="ts">
+import {computed, ref} from 'vue';
+import DataTypeSelector from './DataTypeSelector.vue';
+import {startBackup} from '../services/api';
+import type {BackupRequest, DataTypeSelection} from '../types/api';
+
+const emit = defineEmits<{
+  'backup-started': [operationId: string];
+}>();
+
+const dataTypes = ref<DataTypeSelection>({
+  chats: true,
+  prompts: true,
+  tools: false,
+  files: true,
+  models: true,
+  knowledge: true,
+  users: false,
+  groups: false,
+  feedbacks: false,
+});
+
+// Generate default filename with timestamp
+const generateDefaultFilename = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `backup-${year}-${month}-${day}-${hours}-${minutes}.age`;
+};
+
+const outputFilename = ref(generateDefaultFilename());
+const description = ref('');
+const isSubmitting = ref(false);
+const error = ref<string | null>(null);
+const success = ref(false);
+const operationId = ref<string | null>(null);
+
+const hasSelectedTypes = computed(() => {
+  return Object.values(dataTypes.value).some((selected) => selected);
+});
+
+const handleSubmit = async () => {
+  if (!hasSelectedTypes.value) {
+    error.value = 'Please select at least one data type to backup';
+    return;
+  }
+
+  isSubmitting.value = true;
+  error.value = null;
+  success.value = false;
+
+  try {
+    const request: BackupRequest = {
+      outputFilename: outputFilename.value,
+      encryptRecipients: [],
+      dataTypes: dataTypes.value,
+    };
+
+    const response = await startBackup(request);
+    operationId.value = response.operationId;
+    success.value = true;
+    
+    // Emit event to parent - App.vue will handle WebSocket updates
+    emit('backup-started', response.operationId);
+    
+    // Reset success message after delay
+    setTimeout(() => {
+      success.value = false;
+    }, 3000);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to start backup';
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+</script>
+
+<style scoped>
+.backup-form {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e9ecef;
+  height: 100%;
+}
+
+.backup-form h2 {
+  margin: 0 0 1rem 0;
+  color: #212529;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.alert {
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.alert-error {
+  background: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+}
+
+.alert-success {
+  background: #efe;
+  color: #3c3;
+  border: 1px solid #cfc;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.8125rem;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 0.9375rem;
+  transition: all 0.2s;
+}
+
+.form-input:hover {
+  border-color: #adb5bd;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.form-hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: #6c757d;
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.btn {
+  padding: 0.625rem 1.25rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+</style>

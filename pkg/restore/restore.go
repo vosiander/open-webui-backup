@@ -14,6 +14,9 @@ import (
 	"github.com/vosiander/open-webui-backup/pkg/openwebui"
 )
 
+// ProgressCallback is a function that receives progress updates during restore operations
+type ProgressCallback func(percent int, message string)
+
 // SelectiveRestoreOptions defines which data types to restore from a backup
 type SelectiveRestoreOptions struct {
 	Knowledge bool
@@ -1186,8 +1189,13 @@ func extractFileFromZip(zipPath string) (*openwebui.FileExport, error) {
 }
 
 // RestoreSelective performs a selective restore from a unified backup file based on the provided options
-func RestoreSelective(client *openwebui.Client, inputFile string, options *SelectiveRestoreOptions, overwrite bool) error {
+// progressCallback is an optional callback function for progress updates (can be nil)
+func RestoreSelective(client *openwebui.Client, inputFile string, options *SelectiveRestoreOptions, overwrite bool, progressCallback ProgressCallback) error {
 	logrus.Info("Starting selective restore...")
+
+	if progressCallback != nil {
+		progressCallback(0, "Starting selective restore...")
+	}
 
 	// Validate that at least one option is enabled
 	if !options.Knowledge && !options.Models && !options.Tools && !options.Prompts && !options.Files && !options.Chats && !options.Users && !options.Groups && !options.Feedbacks {
@@ -1235,6 +1243,9 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 
 	// Restore selected types - USERS MUST BE RESTORED FIRST
 	if options.Users {
+		if progressCallback != nil {
+			progressCallback(10, "Restoring users...")
+		}
 		if contains(metadata.ContainedTypes, "user") {
 			logrus.Info("Restoring users...")
 			if err := restoreUsersFromUnified(r, client, overwrite); err != nil {
@@ -1246,6 +1257,9 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	}
 
 	if options.Knowledge {
+		if progressCallback != nil {
+			progressCallback(20, "Restoring knowledge bases...")
+		}
 		if contains(metadata.ContainedTypes, "knowledge") {
 			logrus.Info("Restoring knowledge bases...")
 			if err := restoreKnowledgeBasesFromUnified(r, client, overwrite); err != nil {
@@ -1257,6 +1271,9 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	}
 
 	if options.Models {
+		if progressCallback != nil {
+			progressCallback(35, "Restoring models...")
+		}
 		if contains(metadata.ContainedTypes, "model") {
 			logrus.Info("Restoring models...")
 			if err := restoreModelsFromUnified(r, client, overwrite); err != nil {
@@ -1268,6 +1285,9 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	}
 
 	if options.Tools {
+		if progressCallback != nil {
+			progressCallback(50, "Restoring tools...")
+		}
 		if contains(metadata.ContainedTypes, "tool") {
 			logrus.Info("Restoring tools...")
 			if err := restoreToolsFromUnified(r, client, overwrite); err != nil {
@@ -1279,6 +1299,9 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	}
 
 	if options.Prompts {
+		if progressCallback != nil {
+			progressCallback(60, "Restoring prompts...")
+		}
 		if contains(metadata.ContainedTypes, "prompt") {
 			logrus.Info("Restoring prompts...")
 			if err := restorePromptsFromUnified(r, client, overwrite); err != nil {
@@ -1290,6 +1313,9 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	}
 
 	if options.Files {
+		if progressCallback != nil {
+			progressCallback(70, "Restoring files...")
+		}
 		if contains(metadata.ContainedTypes, "file") {
 			logrus.Info("Restoring files...")
 			if err := restoreFilesFromUnified(r, client, overwrite); err != nil {
@@ -1301,6 +1327,9 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	}
 
 	if options.Chats {
+		if progressCallback != nil {
+			progressCallback(78, "Restoring chats...")
+		}
 		if contains(metadata.ContainedTypes, "chat") {
 			logrus.Info("Restoring chats...")
 			if err := restoreChatsFromUnified(r, client, overwrite); err != nil {
@@ -1312,6 +1341,9 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	}
 
 	if options.Groups {
+		if progressCallback != nil {
+			progressCallback(86, "Restoring groups...")
+		}
 		if contains(metadata.ContainedTypes, "group") {
 			logrus.Info("Restoring groups...")
 			if err := restoreGroupsFromUnified(r, client, overwrite); err != nil {
@@ -1323,6 +1355,9 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 	}
 
 	if options.Feedbacks {
+		if progressCallback != nil {
+			progressCallback(93, "Restoring feedbacks...")
+		}
 		if contains(metadata.ContainedTypes, "feedback") {
 			logrus.Info("Restoring feedbacks...")
 			if err := restoreFeedbacksFromUnified(r, client, overwrite); err != nil {
@@ -1333,6 +1368,9 @@ func RestoreSelective(client *openwebui.Client, inputFile string, options *Selec
 		}
 	}
 
+	if progressCallback != nil {
+		progressCallback(100, "Restore completed successfully")
+	}
 	logrus.Info("Selective restore completed successfully")
 	return nil
 }

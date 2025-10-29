@@ -15,6 +15,9 @@ import (
 	"github.com/vosiander/open-webui-backup/pkg/openwebui"
 )
 
+// ProgressCallback is a function that receives progress updates during backup operations
+type ProgressCallback func(percent int, message string)
+
 // SelectiveBackupOptions defines which data types to include in a backup
 type SelectiveBackupOptions struct {
 	Knowledge bool
@@ -816,8 +819,13 @@ func backupChatToZip(zipWriter *zip.Writer, chat *openwebui.Chat) error {
 
 // BackupSelective performs a selective backup based on the provided options
 // outputFile should be the full path to the output ZIP file
-func BackupSelective(client *openwebui.Client, outputFile string, options *SelectiveBackupOptions) error {
+// progressCallback is an optional callback function for progress updates (can be nil)
+func BackupSelective(client *openwebui.Client, outputFile string, options *SelectiveBackupOptions, progressCallback ProgressCallback) error {
 	logrus.Info("Starting selective backup...")
+
+	if progressCallback != nil {
+		progressCallback(0, "Starting selective backup...")
+	}
 
 	// Validate that at least one option is enabled
 	if !options.Knowledge && !options.Models && !options.Tools && !options.Prompts && !options.Files && !options.Chats {
@@ -845,6 +853,9 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 
 	// Backup selected types
 	if options.Knowledge {
+		if progressCallback != nil {
+			progressCallback(10, "Backing up knowledge bases...")
+		}
 		logrus.Info("Backing up knowledge bases...")
 		kbCount, err := backupAllKnowledgeBases(zipWriter, client)
 		if err != nil {
@@ -858,6 +869,9 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 	}
 
 	if options.Models {
+		if progressCallback != nil {
+			progressCallback(25, "Backing up models...")
+		}
 		logrus.Info("Backing up models...")
 		modelCount, err := backupAllModels(zipWriter, client)
 		if err != nil {
@@ -871,6 +885,9 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 	}
 
 	if options.Tools {
+		if progressCallback != nil {
+			progressCallback(40, "Backing up tools...")
+		}
 		logrus.Info("Backing up tools...")
 		toolCount, err := backupAllTools(zipWriter, client)
 		if err != nil {
@@ -884,6 +901,9 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 	}
 
 	if options.Prompts {
+		if progressCallback != nil {
+			progressCallback(55, "Backing up prompts...")
+		}
 		logrus.Info("Backing up prompts...")
 		promptCount, err := backupAllPrompts(zipWriter, client)
 		if err != nil {
@@ -897,6 +917,9 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 	}
 
 	if options.Files {
+		if progressCallback != nil {
+			progressCallback(65, "Backing up files...")
+		}
 		logrus.Info("Backing up files...")
 		fileCount, err := backupAllFiles(zipWriter, client)
 		if err != nil {
@@ -910,6 +933,9 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 	}
 
 	if options.Chats {
+		if progressCallback != nil {
+			progressCallback(75, "Backing up chats...")
+		}
 		logrus.Info("Backing up chats...")
 		chatCount, err := backupAllChats(zipWriter, client)
 		if err != nil {
@@ -923,6 +949,9 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 	}
 
 	if options.Groups {
+		if progressCallback != nil {
+			progressCallback(82, "Backing up groups...")
+		}
 		logrus.Info("Backing up groups...")
 		groupCount, err := backupAllGroups(zipWriter, client)
 		if err != nil {
@@ -936,6 +965,9 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 	}
 
 	if options.Feedbacks {
+		if progressCallback != nil {
+			progressCallback(88, "Backing up feedbacks...")
+		}
 		logrus.Info("Backing up feedbacks...")
 		feedbackCount, err := backupAllFeedbacks(zipWriter, client)
 		if err != nil {
@@ -950,6 +982,9 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 
 	// IMPORTANT: Users must be backed up LAST
 	if options.Users {
+		if progressCallback != nil {
+			progressCallback(93, "Backing up users...")
+		}
 		logrus.Info("Backing up users...")
 		userCount, err := backupAllUsers(zipWriter, client)
 		if err != nil {
@@ -974,6 +1009,9 @@ func BackupSelective(client *openwebui.Client, outputFile string, options *Selec
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 
+	if progressCallback != nil {
+		progressCallback(100, "Backup completed successfully")
+	}
 	logrus.Infof("Created selective backup: %s (%d total items)", filepath.Base(outputFile), totalItems)
 	logrus.Info("Selective backup completed successfully")
 	return nil

@@ -12,7 +12,15 @@ dotenv:
 tasks:
   run:
     desc: Run the owuiback application
-    cmd: go run cmd/owuiback/main.go {{.CLI_ARGS}}
+    cmds:
+      - task: kill-server
+      - task: clean
+      - task: frontend-build
+      - go run cmd/owuiback/main.go {{.CLI_ARGS}}
+
+  kill-server:
+    desc: Kill the running owuiback server
+    cmd: lsof -ti:3000 | xargs kill -9
 
   backup:
     desc: Runs backup-all with encryption. Make sure to create an identity first
@@ -37,6 +45,41 @@ tasks:
       - go mod download
       - go mod tidy
       - task: new-identity
+      - task: frontend-install
+
+  frontend-install:
+    desc: Install frontend dependencies
+    dir: web
+    cmd: npm install
+
+  frontend-dev:
+    desc: Run frontend development server
+    dir: web
+    cmd: npm run dev
+
+  frontend-build:
+    desc: Build frontend for production and copy to pkg/web
+    cmds:
+      - echo "Cleaning previous build..."
+      - rm -rf web/dist
+      - rm -rf pkg/web/dist
+      - echo "Building frontend..."
+      - cd web && npm run build
+      - echo "Copying to pkg/web/dist..."
+      - mkdir -p pkg/web/dist
+      - cp -r web/dist/* pkg/web/dist/
+      - echo "Frontend build complete!"
+
+  clean:
+    desc: Clean all build artifacts and caches
+    cmds:
+      - echo "Cleaning Go build cache..."
+      - go clean -cache
+      - echo "Cleaning frontend build..."
+      - rm -rf web/dist
+      - rm -rf pkg/web/dist
+      - rm -rf dist
+      - echo "Clean complete!"
 
   new-identity:
     desc: Generates a new identity
@@ -57,8 +100,9 @@ tasks:
       - docker run --rm owuiback:latest {{.CLI_ARGS}}
 
   build:
-    desc: Build binaries for all platforms (Linux, macOS, Windows with amd64 and arm64)
+    desc: Build binaries for all platforms (Linux, macOS, Windows with amd64 and arm64) with embedded frontend
     cmds:
+      - task: frontend-build
       - mkdir -p dist
       - GOOS=linux GOARCH=amd64 go build -o dist/owuiback-linux-amd64 cmd/owuiback/main.go
       - GOOS=linux GOARCH=arm64 go build -o dist/owuiback-linux-arm64 cmd/owuiback/main.go
@@ -66,3 +110,14 @@ tasks:
       - GOOS=darwin GOARCH=arm64 go build -o dist/owuiback-darwin-arm64 cmd/owuiback/main.go
       - GOOS=windows GOARCH=amd64 go build -o dist/owuiback-windows-amd64.exe cmd/owuiback/main.go
       - GOOS=windows GOARCH=arm64 go build -o dist/owuiback-windows-arm64.exe cmd/owuiback/main.go
+
+  serve:
+    desc: Build and run the web server with embedded frontend (with fresh build)
+    cmds:
+      - echo "Cleaning previous builds..."
+      - rm -rf web/dist
+      - rm -rf pkg/web/dist
+      - go clean -cache
+      - task: frontend-build
+      - echo "Starting server with fresh build..."
+      - go run cmd/owuiback/main.go serve

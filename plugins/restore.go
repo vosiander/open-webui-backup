@@ -126,8 +126,8 @@ func (p *RestorePlugin) Execute(cfg *config.Config) error {
 		options.Feedbacks = true
 	}
 
-	// Perform the restore
-	if err := restore.RestoreSelective(client, tempFile, options, p.overwrite); err != nil {
+	// Perform the restore (no progress callback for CLI)
+	if err := restore.RestoreSelective(client, tempFile, options, p.overwrite, nil); err != nil {
 		logrus.Fatalf("Failed to restore: %v", err)
 	}
 

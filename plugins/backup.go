@@ -116,8 +116,8 @@ func (p *BackupPlugin) Execute(cfg *config.Config) error {
 	// Create temporary file for unencrypted backup
 	tempFile := encryptedFile + ".tmp"
 
-	// Perform the backup to temporary file
-	if err := backup.BackupSelective(client, tempFile, options); err != nil {
+	// Perform the backup to temporary file (no progress callback for CLI)
+	if err := backup.BackupSelective(client, tempFile, options, nil); err != nil {
 		logrus.Fatalf("Failed to backup: %v", err)
 	}
 

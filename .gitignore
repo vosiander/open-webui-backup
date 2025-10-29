@@ -234,3 +234,7 @@ go.work.sum
 /.idea/modules.xml
 /.idea/open-webui-backup.iml
 /.idea/vcs.xml
+
+# Frontend
+web/node_modules/
+web/dist/

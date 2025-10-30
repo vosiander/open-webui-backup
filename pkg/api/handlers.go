@@ -227,7 +227,7 @@ func (s *Server) handleGetStatus(c echo.Context) error {
 
 // handleListBackups lists all available backup files
 func (s *Server) handleListBackups(c echo.Context) error {
-	backups, err := listBackupFiles(s.config.BackupsDir)
+	backups, err := listBackupFilesWithMetadata(s.config.BackupsDir)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to list backups: %v", err),
@@ -260,6 +260,41 @@ func (s *Server) handleDownloadBackup(c echo.Context) error {
 	return c.File(filePath)
 }
 
+// handleDeleteBackup deletes a backup file
+func (s *Server) handleDeleteBackup(c echo.Context) error {
+	filename := c.Param("filename")
+
+	// Validate filename (prevent path traversal)
+	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Invalid filename",
+		})
+	}
+
+	filePath := filepath.Join(s.config.BackupsDir, filename)
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "File not found",
+		})
+	}
+
+	// Delete the file
+	if err := os.Remove(filePath); err != nil {
+		logrus.WithError(err).Errorf("Failed to delete backup file: %s", filename)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("Failed to delete file: %v", err),
+		})
+	}
+
+	logrus.Infof("Deleted backup file: %s", filename)
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"message": "Backup deleted successfully",
+	})
+}
+
 // listBackupFiles returns a list of backup files in the specified directory
 func listBackupFiles(dir string) ([]string, error) {
 	// Ensure directory exists
@@ -276,6 +311,47 @@ func listBackupFiles(dir string) ([]string, error) {
 	for _, entry := range entries {
 		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".zip") || strings.HasSuffix(entry.Name(), ".age")) {
 			backups = append(backups, entry.Name())
+		}
+	}
+
+	return backups, nil
+}
+
+// BackupFileInfo represents metadata about a backup file
+type BackupFileInfo struct {
+	Name        string `json:"name"`
+	Size        int64  `json:"size"`
+	ModTime     string `json:"modTime"`
+	DownloadURL string `json:"downloadUrl"`
+}
+
+// listBackupFilesWithMetadata returns a list of backup files with their metadata
+func listBackupFilesWithMetadata(dir string) ([]BackupFileInfo, error) {
+	// Ensure directory exists
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var backups []BackupFileInfo
+	for _, entry := range entries {
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".zip") || strings.HasSuffix(entry.Name(), ".age")) {
+			info, err := entry.Info()
+			if err != nil {
+				logrus.WithError(err).Warnf("Failed to get info for file: %s", entry.Name())
+				continue
+			}
+
+			backups = append(backups, BackupFileInfo{
+				Name:        entry.Name(),
+				Size:        info.Size(),
+				ModTime:     info.ModTime().Format("2006-01-02T15:04:05Z07:00"),
+				DownloadURL: fmt.Sprintf("/api/backups/%s", entry.Name()),
+			})
 		}
 	}
 

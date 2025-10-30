@@ -43,6 +43,13 @@
           >
             Download
           </a>
+          <button
+            @click="handleDelete(backup)"
+            class="btn-delete"
+            title="Delete backup"
+          >
+            Delete
+          </button>
         </div>
       </div>
     </div>
@@ -51,7 +58,7 @@
 
 <script setup lang="ts">
 import {computed, onMounted, ref} from 'vue';
-import {type BackupFile, listBackups} from '../services/api';
+import {type BackupFile, deleteBackup, listBackups} from '../services/api';
 
 const backups = ref<BackupFile[]>([]);
 const loading = ref(false);
@@ -98,6 +105,19 @@ const formatDate = (dateStr: string): string => {
     return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
   } else {
     return date.toLocaleDateString();
+  }
+};
+
+const handleDelete = async (backup: BackupFile) => {
+  if (!confirm(`Are you sure you want to delete "${backup.name}"? This action cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    await deleteBackup(backup.name);
+    await refreshList();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to delete backup';
   }
 };
 
@@ -232,6 +252,8 @@ defineExpose({
 }
 
 .backup-actions {
+  display: flex;
+  gap: 0.5rem;
   margin-left: 1rem;
 }
 
@@ -252,6 +274,25 @@ defineExpose({
 .btn-download:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.btn-delete {
+  padding: 0.5rem 1rem;
+  background: white;
+  color: #dc3545;
+  border: 1px solid #dc3545;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-delete:hover {
+  background: #dc3545;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
 }
 
 @media (max-width: 768px) {

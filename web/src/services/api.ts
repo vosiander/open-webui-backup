@@ -106,3 +106,9 @@ export async function listBackups(): Promise<BackupFile[]> {
 export function getDownloadUrl(filename: string): string {
   return `${API_BASE}/backups/${encodeURIComponent(filename)}`;
 }
+
+export async function deleteBackup(filename: string): Promise<void> {
+  await fetchJSON(`${API_BASE}/backups/${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
+  });
+}

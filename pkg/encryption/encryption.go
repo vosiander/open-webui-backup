@@ -19,8 +19,8 @@ type EncryptOptions struct {
 
 // DecryptOptions contains decryption configuration
 type DecryptOptions struct {
-	Passphrase    string   // Passphrase for symmetric decryption
-	IdentityFiles []string // Paths to age identity files (private keys)
+	Passphrase string   // Passphrase for symmetric decryption
+	Identities []string // Raw age identity content as strings
 }
 
 // EncryptFile encrypts a file using age encryption
@@ -117,24 +117,18 @@ func DecryptFile(inputPath, outputPath string, opts *DecryptOptions) error {
 		}
 		identities = []age.Identity{identity}
 		logrus.Debug("Using passphrase-based decryption")
-	} else if len(opts.IdentityFiles) > 0 {
-		// Identity file decryption
-		for _, identityPath := range opts.IdentityFiles {
-			idFile, err := os.Open(identityPath)
+	} else if len(opts.Identities) > 0 {
+		// Identity string decryption
+		for i, identityContent := range opts.Identities {
+			ids, err := age.ParseIdentities(strings.NewReader(identityContent))
 			if err != nil {
-				return fmt.Errorf("failed to open identity file %s: %w", identityPath, err)
-			}
-			defer idFile.Close()
-
-			ids, err := age.ParseIdentities(idFile)
-			if err != nil {
-				return fmt.Errorf("failed to parse identity file %s: %w", identityPath, err)
+				return fmt.Errorf("failed to parse identity %d: %w", i+1, err)
 			}
 			identities = append(identities, ids...)
 		}
-		logrus.Debugf("Using identity file decryption with %d identity file(s)", len(opts.IdentityFiles))
+		logrus.Debugf("Using identity decryption with %d identity string(s)", len(opts.Identities))
 	} else {
-		return fmt.Errorf("either passphrase or identity files must be provided")
+		return fmt.Errorf("either passphrase or identities must be provided")
 	}
 
 	// Try to read with armor decoder first (ASCII format)
@@ -163,12 +157,7 @@ func DecryptFile(inputPath, outputPath string, opts *DecryptOptions) error {
 
 // IsEncrypted checks if a file appears to be age-encrypted
 func IsEncrypted(path string) bool {
-	// Check by file extension
-	if strings.HasSuffix(path, ".age") {
-		return true
-	}
-
-	// Check by reading the file header
+	// Check by reading the file header first (more reliable than extension)
 	file, err := os.Open(path)
 	if err != nil {
 		return false
@@ -176,14 +165,20 @@ func IsEncrypted(path string) bool {
 	defer file.Close()
 
 	// Read first few bytes to check for age armor header
-	header := make([]byte, 30)
+	header := make([]byte, 35)
 	n, err := file.Read(header)
 	if err != nil || n < 10 {
 		return false
 	}
 
-	// Check for age armor header
-	return strings.HasPrefix(string(header), "-----BEGIN AGE ENCRYPTED FILE-----")
+	// Check for age armor header (most reliable indicator)
+	if strings.HasPrefix(string(header), "-----BEGIN AGE ENCRYPTED FILE-----") {
+		return true
+	}
+
+	// If content doesn't match, file is not encrypted regardless of extension
+	// (This handles cases where .age files are actually plain ZIP files)
+	return false
 }
 
 // ValidatePassphrase checks if a passphrase meets minimum requirements
@@ -222,11 +217,12 @@ func EncryptFileWithRecipients(inputPath, outputPath string, recipients []string
 }
 
 // DecryptFileWithIdentities is a convenience function for identity-based decryption
-func DecryptFileWithIdentities(inputPath, outputPath string, identityFiles []string) error {
-	if len(identityFiles) == 0 {
-		return fmt.Errorf("at least one identity file is required")
+// identities should contain the raw age identity content as strings
+func DecryptFileWithIdentities(inputPath, outputPath string, identities []string) error {
+	if len(identities) == 0 {
+		return fmt.Errorf("at least one identity is required")
 	}
 	return DecryptFile(inputPath, outputPath, &DecryptOptions{
-		IdentityFiles: identityFiles,
+		Identities: identities,
 	})
 }

@@ -86,8 +86,19 @@ func (p *RestorePlugin) Execute(cfg *config.Config) error {
 
 	// Decrypt the backup
 	logrus.Info("Decrypting backup with identity file(s)...")
+
+	// Read identity file contents
+	var identityContents []string
+	for _, identityFile := range identities {
+		content, err := os.ReadFile(identityFile)
+		if err != nil {
+			logrus.Fatalf("Failed to read identity file %s: %v", identityFile, err)
+		}
+		identityContents = append(identityContents, string(content))
+	}
+
 	decryptOpts := &encryption.DecryptOptions{
-		IdentityFiles: identities,
+		Identities: identityContents,
 	}
 
 	if err := encryption.DecryptFile(p.file, tempFile, decryptOpts); err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
 	"github.com/vosiander/open-webui-backup/pkg/backup"
+	"github.com/vosiander/open-webui-backup/pkg/encryption"
 	"github.com/vosiander/open-webui-backup/pkg/openwebui"
 	"github.com/vosiander/open-webui-backup/pkg/restore"
 )
@@ -190,14 +191,62 @@ func (s *Server) handleStartRestore(c echo.Context) error {
 			progress(percent, message)
 		}
 
-		// Decrypt if needed (handled by restore function based on .age extension)
-		if req.DecryptIdentity != "" {
-			restoreProgress(5, "Decrypting backup...")
-			// Decryption happens inline in restore function
+		// Check if file is encrypted and needs decryption
+		actualInputFile := inputFile
+		var tempFile string
+
+		if encryption.IsEncrypted(inputFile) {
+			restoreProgress(5, "Decrypting backup file...")
+
+			// Get identity content
+			var identityContent string
+			if req.DecryptIdentity != "" {
+				// Identity content provided directly from web UI
+				identityContent = req.DecryptIdentity
+				logrus.Debug("Using identity content from request")
+			} else {
+				// Fall back to identity file from environment variable
+				identityPath := os.Getenv("AGE_IDENTITY")
+				if identityPath == "" {
+					return fmt.Errorf("encrypted backup requires age identity (set AGE_IDENTITY or provide decryptIdentity)")
+				}
+
+				// Read the identity file
+				content, err := os.ReadFile(identityPath)
+				if err != nil {
+					return fmt.Errorf("failed to read identity file %s: %w", identityPath, err)
+				}
+				identityContent = string(content)
+				logrus.Debugf("Using identity from file: %s", identityPath)
+			}
+
+			// Create temporary file for decrypted content
+			tempFile = inputFile + ".decrypted.tmp"
+
+			// Decrypt the backup file with identity content
+			if err := encryption.DecryptFileWithIdentities(inputFile, tempFile, []string{identityContent}); err != nil {
+				return fmt.Errorf("failed to decrypt backup: %w", err)
+			}
+
+			// Use decrypted file for restore
+			actualInputFile = tempFile
+
+			// Ensure temp file is cleaned up after restore
+			defer func() {
+				if tempFile != "" {
+					if err := os.Remove(tempFile); err != nil {
+						logrus.WithError(err).Warnf("Failed to remove temporary decrypted file: %s", tempFile)
+					} else {
+						logrus.Debugf("Cleaned up temporary file: %s", tempFile)
+					}
+				}
+			}()
+
+			restoreProgress(10, "Decryption complete, starting restore...")
 		}
 
 		// Perform the restore
-		return restore.RestoreSelective(client, inputFile, options, req.Overwrite, restoreProgress)
+		return restore.RestoreSelective(client, actualInputFile, options, req.Overwrite, restoreProgress)
 	})
 
 	if err != nil {

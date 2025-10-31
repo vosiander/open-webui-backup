@@ -1,14 +1,6 @@
 <template>
   <div class="backup-form">
     <h2>Create Backup</h2>
-    
-    <div v-if="error" class="alert alert-error">
-      {{ error }}
-    </div>
-
-    <div v-if="success" class="alert alert-success">
-      Backup started successfully! Operation ID: {{ operationId }}
-    </div>
 
     <form @submit.prevent="handleSubmit">
       <DataTypeSelector v-model="dataTypes" />
@@ -58,7 +50,8 @@ import {startBackup} from '../services/api';
 import type {BackupRequest, DataTypeSelection} from '../types/api';
 
 const emit = defineEmits<{
-  'backup-started': [operationId: string];
+  'operation-started': [payload: { operationId: string; type: string }];
+  'operation-error': [payload: { message: string; type: string }];
 }>();
 
 const dataTypes = ref<DataTypeSelection>({
@@ -87,9 +80,6 @@ const generateDefaultFilename = (): string => {
 const outputFilename = ref(generateDefaultFilename());
 const description = ref('');
 const isSubmitting = ref(false);
-const error = ref<string | null>(null);
-const success = ref(false);
-const operationId = ref<string | null>(null);
 
 const hasSelectedTypes = computed(() => {
   return Object.values(dataTypes.value).some((selected) => selected);
@@ -97,13 +87,14 @@ const hasSelectedTypes = computed(() => {
 
 const handleSubmit = async () => {
   if (!hasSelectedTypes.value) {
-    error.value = 'Please select at least one data type to backup';
+    emit('operation-error', {
+      message: 'Please select at least one data type to backup',
+      type: 'backup'
+    });
     return;
   }
 
   isSubmitting.value = true;
-  error.value = null;
-  success.value = false;
 
   try {
     const request: BackupRequest = {
@@ -113,18 +104,17 @@ const handleSubmit = async () => {
     };
 
     const response = await startBackup(request);
-    operationId.value = response.operationId;
-    success.value = true;
     
-    // Emit event to parent - App.vue will handle WebSocket updates
-    emit('backup-started', response.operationId);
-    
-    // Reset success message after delay
-    setTimeout(() => {
-      success.value = false;
-    }, 3000);
+    // Emit event to parent - App.vue will handle display
+    emit('operation-started', {
+      operationId: response.operationId,
+      type: 'backup'
+    });
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to start backup';
+    emit('operation-error', {
+      message: err instanceof Error ? err.message : 'Failed to start backup',
+      type: 'backup'
+    });
   } finally {
     isSubmitting.value = false;
   }
@@ -146,24 +136,6 @@ const handleSubmit = async () => {
   color: #212529;
   font-size: 1.25rem;
   font-weight: 600;
-}
-
-.alert {
-  padding: 1rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
-}
-
-.alert-error {
-  background: #fee;
-  color: #c33;
-  border: 1px solid #fcc;
-}
-
-.alert-success {
-  background: #efe;
-  color: #3c3;
-  border: 1px solid #cfc;
 }
 
 .form-group {

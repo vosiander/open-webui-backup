@@ -91,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import {onMounted, ref} from 'vue';
+import {onMounted, ref, watch} from 'vue';
 import type {ConfigResponse} from '../types/api';
 import {fetchConfig, updateConfig} from '../services/api';
 
@@ -137,6 +137,15 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+});
+
+// Watch for changes and emit updates
+watch(ageIdentity, (newValue) => {
+  emit('update:ageIdentity', newValue);
+});
+
+watch(ageRecipients, (newValue) => {
+  emit('update:ageRecipients', newValue);
 });
 
 const handleSave = async () => {

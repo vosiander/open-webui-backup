@@ -15,7 +15,15 @@
       </div>
     </div>
 
-    <div v-if="!status" class="ready-message">
+    <div v-if="formError" class="alert alert-error">
+      <strong>Error:</strong> {{ formError }}
+    </div>
+
+    <div v-if="formSuccess" class="alert alert-success">
+      {{ formSuccess.type === 'backup' ? 'Backup' : 'Restore' }} started successfully! Operation ID: {{ formSuccess.operationId }}
+    </div>
+
+    <div v-if="!status && !formError && !formSuccess" class="ready-message">
       No operations currently running. Start a backup or restore to see progress here.
     </div>
 
@@ -51,6 +59,8 @@ import {getDownloadUrl} from '../services/api';
 
 interface Props {
   status: OperationStatus | null;
+  formError: string | null;
+  formSuccess: { operationId: string; type: string } | null;
 }
 
 const props = defineProps<Props>();
@@ -255,5 +265,29 @@ const formatDate = (dateStr: string): string => {
   display: block;
   margin-bottom: 0.375rem;
   font-weight: 600;
+}
+
+.alert {
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.alert strong {
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+
+.alert-error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.alert-success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
 }
 </style>

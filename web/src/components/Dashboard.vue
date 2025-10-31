@@ -1,7 +1,10 @@
 <template>
   <div class="dashboard">
     <header class="dashboard-header">
-      <h1>Open WebUI Backup Dashboard!!!</h1>
+      <h1>Open WebUI Backup Dashboard</h1>
+      <button @click="openSettings" class="btn-settings" title="Settings">
+        <Settings :size="24" />
+      </button>
     </header>
 
     <div class="dashboard-content">
@@ -11,7 +14,15 @@
 </template>
 
 <script setup lang="ts">
-// Connection status removed - operation status is shown in OperationProgress component
+import {Settings} from 'lucide-vue-next';
+
+const emit = defineEmits<{
+  'open-settings': [];
+}>();
+
+const openSettings = () => {
+  emit('open-settings');
+};
 </script>
 
 <style scoped>
@@ -34,6 +45,28 @@
   margin: 0;
   font-size: 1.75rem;
   font-weight: 600;
+}
+
+.btn-settings {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-settings:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-settings:active {
+  transform: translateY(0);
 }
 
 .dashboard-content {

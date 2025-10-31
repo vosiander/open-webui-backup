@@ -1,32 +1,45 @@
 <template>
-  <Dashboard>
-    <ConfigPanel
-      @update:ageIdentity="handleAgeIdentityUpdate"
-      @update:ageRecipients="handleAgeRecipientsUpdate"
-    />
-
+  <Dashboard @open-settings="openConfigModal">
     <div class="current-operation">
-      <OperationProgress :status="currentOperation" />
+      <OperationProgress 
+        :status="currentOperation"
+        :formError="formError"
+        :formSuccess="formSuccess"
+      />
     </div>
 
     <div class="operations-grid">
       <div class="operation-section">
-        <BackupForm @backup-started="handleBackupStarted" />
+        <BackupForm 
+          @operation-started="handleOperationStarted"
+          @operation-error="handleOperationError"
+        />
       </div>
 
       <div class="operation-section">
-        <RestoreForm @restore-started="handleRestoreStarted" />
+        <RestoreForm 
+          :ageIdentity="ageIdentity"
+          @operation-started="handleOperationStarted"
+          @operation-error="handleOperationError"
+        />
       </div>
     </div>
 
     <BackupList ref="backupListRef" />
   </Dashboard>
+
+  <ConfigModal 
+    :isOpen="isConfigModalOpen"
+    @close="closeConfigModal"
+    @update:ageIdentity="handleAgeIdentityUpdate"
+    @update:ageRecipients="handleAgeRecipientsUpdate"
+  />
 </template>
 
 <script setup lang="ts">
 import {onMounted, ref} from 'vue';
 import Dashboard from './components/Dashboard.vue';
-import ConfigPanel from './components/ConfigPanel.vue';
+import ConfigModal from './components/ConfigModal.vue';
 import BackupForm from './components/BackupForm.vue';
 import RestoreForm from './components/RestoreForm.vue';
 import OperationProgress from './components/OperationProgress.vue';
@@ -37,8 +50,19 @@ import type {OperationStatus} from './types/api';
 const { addMessageHandler } = useWebSocket();
 const currentOperation = ref<OperationStatus | null>(null);
 const backupListRef = ref<InstanceType<typeof BackupList> | null>(null);
+const formError = ref<string | null>(null);
+const formSuccess = ref<{ operationId: string; type: string } | null>(null);
+const isConfigModalOpen = ref(false);
 const ageIdentity = ref('');
 const ageRecipients = ref('');
+
+const openConfigModal = () => {
+  isConfigModalOpen.value = true;
+};
+
+const closeConfigModal = () => {
+  isConfigModalOpen.value = false;
+};
 
 const handleAgeIdentityUpdate = (value: string) => {
   ageIdentity.value = value;
@@ -48,14 +72,34 @@ const handleAgeRecipientsUpdate = (value: string) => {
   ageRecipients.value = value;
 };
 
-const handleBackupStarted = (operationId: string) => {
-  console.log('Backup started:', operationId);
-  // Current operation will be updated via WebSocket
+const handleOperationStarted = (payload: { operationId: string; type: string }) => {
+  console.log('Operation started:', payload);
+  
+  // Clear any previous errors
+  formError.value = null;
+  
+  // Show success message
+  formSuccess.value = payload;
+  
+  // Clear success message after delay
+  setTimeout(() => {
+    formSuccess.value = null;
+  }, 5000);
 };
 
-const handleRestoreStarted = (operationId: string) => {
-  console.log('Restore started:', operationId);
-  // Current operation will be updated via WebSocket
+const handleOperationError = (payload: { message: string; type: string }) => {
+  console.log('Operation error:', payload);
+  
+  // Clear any previous success
+  formSuccess.value = null;
+  
+  // Show error message
+  formError.value = payload.message;
+  
+  // Clear error message after delay
+  setTimeout(() => {
+    formError.value = null;
+  }, 8000);
 };
 
 onMounted(() => {
@@ -64,6 +108,12 @@ onMounted(() => {
     if (message.type === 'status') {
       const status = message.payload as OperationStatus;
       currentOperation.value = status;
+
+      // Clear form messages when WebSocket status arrives
+      if (status.status === 'running') {
+        formError.value = null;
+        formSuccess.value = null;
+      }
 
       // Refresh backup list when backup completes
       if (status.type === 'backup' && status.status === 'completed') {

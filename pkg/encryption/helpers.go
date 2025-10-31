@@ -1,6 +1,7 @@
 package encryption
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -81,10 +82,19 @@ func DecryptBackupFile(backupPath string, decrypt bool, identityFiles []string) 
 
 	// Prepare decryption options
 	var passphrase string
+	var identities []string
 
 	if len(identityFiles) > 0 {
-		// Identity file mode
+		// Identity file mode - read file contents
 		logrus.Debug("Using identity file decryption")
+		for _, identityFile := range identityFiles {
+			content, err := os.ReadFile(identityFile)
+			if err != nil {
+				os.Remove(tempPath)
+				return "", false, fmt.Errorf("failed to read identity file %s: %w", identityFile, err)
+			}
+			identities = append(identities, string(content))
+		}
 	} else {
 		// Passphrase mode - check env first, then prompt
 		passphrase = GetPassphraseFromEnv()
@@ -100,8 +110,8 @@ func DecryptBackupFile(backupPath string, decrypt bool, identityFiles []string) 
 
 	// Decrypt the backup
 	opts := &DecryptOptions{
-		Passphrase:    passphrase,
-		IdentityFiles: identityFiles,
+		Passphrase: passphrase,
+		Identities: identities,
 	}
 
 	if err := DecryptFile(backupPath, tempPath, opts); err != nil {

@@ -1,14 +1,6 @@
 <template>
   <div class="restore-form">
     <h2>Restore Backup</h2>
-    
-    <div v-if="error" class="alert alert-error">
-      {{ error }}
-    </div>
-
-    <div v-if="success" class="alert alert-success">
-      Restore started successfully! Operation ID: {{ operationId }}
-    </div>
 
     <form @submit.prevent="handleSubmit">
       <div class="form-group">
@@ -52,8 +44,13 @@ import DataTypeSelector from './DataTypeSelector.vue';
 import {type BackupFile, listBackups, startRestore} from '../services/api';
 import type {DataTypeSelection, RestoreRequest} from '../types/api';
 
+const props = defineProps<{
+  ageIdentity?: string;
+}>();
+
 const emit = defineEmits<{
-  'restore-started': [operationId: string];
+  'operation-started': [payload: { operationId: string; type: string }];
+  'operation-error': [payload: { message: string; type: string }];
 }>();
 
 const backups = ref<BackupFile[]>([]);
@@ -71,9 +68,6 @@ const dataTypes = ref<DataTypeSelection>({
 });
 
 const isSubmitting = ref(false);
-const error = ref<string | null>(null);
-const success = ref(false);
-const operationId = ref<string | null>(null);
 
 const hasSelectedTypes = computed(() => {
   return Object.values(dataTypes.value).some((selected) => selected);
@@ -105,47 +99,57 @@ const loadBackups = async () => {
   try {
     backups.value = await listBackups();
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load backups';
+    emit('operation-error', {
+      message: err instanceof Error ? err.message : 'Failed to load backups',
+      type: 'restore'
+    });
   }
 };
 
 const handleSubmit = async () => {
   if (!selectedBackup.value) {
-    error.value = 'Please select a backup file';
+    emit('operation-error', {
+      message: 'Please select a backup file',
+      type: 'restore'
+    });
     return;
   }
 
   if (!hasSelectedTypes.value) {
-    error.value = 'Please select at least one data type to restore';
+    emit('operation-error', {
+      message: 'Please select at least one data type to restore',
+      type: 'restore'
+    });
     return;
   }
 
   isSubmitting.value = true;
-  error.value = null;
-  success.value = false;
 
   try {
     const request: RestoreRequest = {
       inputFilename: selectedBackup.value,
-      decryptIdentity: '',
+      decryptIdentity: props.ageIdentity || '',
       dataTypes: dataTypes.value,
       overwrite: true,
     };
 
     const response = await startRestore(request);
-    operationId.value = response.operationId;
-    success.value = true;
     
-    // Emit event to parent
-    emit('restore-started', response.operationId);
+    // Emit event to parent - App.vue will handle display
+    emit('operation-started', {
+      operationId: response.operationId,
+      type: 'restore'
+    });
 
     // Reset form after short delay
     setTimeout(() => {
-      success.value = false;
       selectedBackup.value = '';
     }, 3000);
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to start restore';
+    emit('operation-error', {
+      message: err instanceof Error ? err.message : 'Failed to start restore',
+      type: 'restore'
+    });
   } finally {
     isSubmitting.value = false;
   }
@@ -171,24 +175,6 @@ onMounted(() => {
   color: #212529;
   font-size: 1.25rem;
   font-weight: 600;
-}
-
-.alert {
-  padding: 1rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
-}
-
-.alert-error {
-  background: #fee;
-  color: #c33;
-  border: 1px solid #fcc;
-}
-
-.alert-success {
-  background: #efe;
-  color: #3c3;
-  border: 1px solid #cfc;
 }
 
 .form-group {

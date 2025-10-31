@@ -29,8 +29,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Copy built frontend from frontend-builder
-COPY --from=frontend-builder /app/web/dist ./web/dist
+# Copy built frontend from frontend-builder to where embed.go expects it
+COPY --from=frontend-builder /app/web/dist ./pkg/web/dist
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o owuiback cmd/owuiback/main.go

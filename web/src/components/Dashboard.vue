@@ -2,9 +2,14 @@
   <div class="dashboard">
     <header class="dashboard-header">
       <h1>Open WebUI Backup Dashboard</h1>
-      <button @click="openSettings" class="btn-settings" title="Settings">
-        <Settings :size="24" />
-      </button>
+      <div class="header-actions">
+        <button @click="openIdentityGenerator" class="btn-settings" title="Generate Identity">
+          <Key :size="24" />
+        </button>
+        <button @click="openSettings" class="btn-settings" title="Settings">
+          <Settings :size="24" />
+        </button>
+      </div>
     </header>
 
     <div class="dashboard-content">
@@ -14,14 +19,19 @@
 </template>
 
 <script setup lang="ts">
-import {Settings} from 'lucide-vue-next';
+import {Key, Settings} from 'lucide-vue-next';
 
 const emit = defineEmits<{
   'open-settings': [];
+  'open-identity-generator': [];
 }>();
 
 const openSettings = () => {
   emit('open-settings');
+};
+
+const openIdentityGenerator = () => {
+  emit('open-identity-generator');
 };
 </script>
 
@@ -45,6 +55,12 @@ const openSettings = () => {
   margin: 0;
   font-size: 1.75rem;
   font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
 }
 
 .btn-settings {

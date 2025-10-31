@@ -62,6 +62,7 @@ func (s *Server) setupRoutes() {
 		api.GET("/backups", s.handleListBackups)
 		api.GET("/backups/:filename", s.handleDownloadBackup)
 		api.DELETE("/backups/:filename", s.handleDeleteBackup)
+		api.POST("/identity/generate", s.handleGenerateIdentity)
 	}
 
 	// WebSocket route

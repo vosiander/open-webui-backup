@@ -1,5 +1,8 @@
 <template>
-  <Dashboard @open-settings="openConfigModal">
+  <Dashboard 
+    @open-settings="openConfigModal"
+    @open-identity-generator="openIdentityGeneratorModal"
+  >
     <div class="current-operation">
       <OperationProgress 
         :status="currentOperation"
@@ -34,12 +37,19 @@
     @update:ageIdentity="handleAgeIdentityUpdate"
     @update:ageRecipients="handleAgeRecipientsUpdate"
   />
+
+  <IdentityGeneratorModal
+    :isOpen="isIdentityGeneratorModalOpen"
+    @close="closeIdentityGeneratorModal"
+    @save-identity="handleSaveIdentity"
+  />
 </template>
 
 <script setup lang="ts">
 import {onMounted, ref} from 'vue';
 import Dashboard from './components/Dashboard.vue';
 import ConfigModal from './components/ConfigModal.vue';
+import IdentityGeneratorModal from './components/IdentityGeneratorModal.vue';
 import BackupForm from './components/BackupForm.vue';
 import RestoreForm from './components/RestoreForm.vue';
 import OperationProgress from './components/OperationProgress.vue';
@@ -53,6 +63,7 @@ const backupListRef = ref<InstanceType<typeof BackupList> | null>(null);
 const formError = ref<string | null>(null);
 const formSuccess = ref<{ operationId: string; type: string } | null>(null);
 const isConfigModalOpen = ref(false);
+const isIdentityGeneratorModalOpen = ref(false);
 const ageIdentity = ref('');
 const ageRecipients = ref('');
 
@@ -62,6 +73,23 @@ const openConfigModal = () => {
 
 const closeConfigModal = () => {
   isConfigModalOpen.value = false;
+};
+
+const openIdentityGeneratorModal = () => {
+  isIdentityGeneratorModalOpen.value = true;
+};
+
+const closeIdentityGeneratorModal = () => {
+  isIdentityGeneratorModalOpen.value = false;
+};
+
+const handleSaveIdentity = (identity: string, recipient: string) => {
+  ageIdentity.value = identity;
+  ageRecipients.value = recipient;
+  
+  // Also emit these to ConfigPanel through ConfigModal
+  handleAgeIdentityUpdate(identity);
+  handleAgeRecipientsUpdate(recipient);
 };
 
 const handleAgeIdentityUpdate = (value: string) => {

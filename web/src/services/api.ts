@@ -1,6 +1,7 @@
 import type {
     BackupRequest,
     ConfigResponse,
+    GenerateIdentityResponse,
     OperationStartResponse,
     OperationStatus,
     RestoreRequest,
@@ -110,5 +111,11 @@ export function getDownloadUrl(filename: string): string {
 export async function deleteBackup(filename: string): Promise<void> {
   await fetchJSON(`${API_BASE}/backups/${encodeURIComponent(filename)}`, {
     method: 'DELETE',
+  });
+}
+
+export async function generateIdentity(): Promise<GenerateIdentityResponse> {
+  return fetchJSON<GenerateIdentityResponse>(`${API_BASE}/identity/generate`, {
+    method: 'POST',
   });
 }

@@ -1,5 +1,22 @@
-# Build stage
-FROM golang:1.24.7-alpine AS builder
+# Frontend build stage
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/web
+
+# Copy package files
+COPY web/package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy frontend source
+COPY web/ ./
+
+# Build frontend
+RUN npm run build
+
+# Backend build stage
+FROM golang:1.24.7-alpine AS backend-builder
 
 WORKDIR /app
 
@@ -11,6 +28,9 @@ RUN go mod download
 
 # Copy source code
 COPY . .
+
+# Copy built frontend from frontend-builder
+COPY --from=frontend-builder /app/web/dist ./web/dist
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o owuiback cmd/owuiback/main.go
@@ -24,7 +44,7 @@ RUN apk --no-cache add ca-certificates age
 WORKDIR /root/
 
 # Copy binary from builder
-COPY --from=builder /app/owuiback .
+COPY --from=backend-builder /app/owuiback .
 
 # Set entrypoint
 ENTRYPOINT ["./owuiback"]

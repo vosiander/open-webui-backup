@@ -226,3 +226,13 @@ func DecryptFileWithIdentities(inputPath, outputPath string, identities []string
 		Identities: identities,
 	})
 }
+
+// GenerateIdentity generates a new X25519 age identity
+func GenerateIdentity() (*age.X25519Identity, error) {
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate X25519 identity: %w", err)
+	}
+	logrus.Debug("Generated new age X25519 identity")
+	return identity, nil
+}

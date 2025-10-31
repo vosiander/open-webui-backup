@@ -53,7 +53,12 @@ func (s *Server) handleUpdateConfig(c echo.Context) error {
 	}
 
 	// Update the configuration
-	s.config.Update(req.OpenWebUIURL, req.APIKey)
+	if req.OpenWebUIURL != "" {
+		s.config.OpenWebUIURL = req.OpenWebUIURL
+	}
+	if req.APIKey != "" {
+		s.config.OpenWebUIAPIKey = req.APIKey
+	}
 
 	logrus.Info("Configuration updated")
 
@@ -364,6 +369,31 @@ func listBackupFiles(dir string) ([]string, error) {
 	}
 
 	return backups, nil
+}
+
+// handleGenerateIdentity generates a new age identity pair
+func (s *Server) handleGenerateIdentity(c echo.Context) error {
+	// Generate a new X25519 identity
+	identity, err := encryption.GenerateIdentity()
+	if err != nil {
+		logrus.WithError(err).Error("Failed to generate age identity")
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error: fmt.Sprintf("Failed to generate identity: %v", err),
+		})
+	}
+
+	// Extract the recipient (public key) from the identity
+	recipient := identity.Recipient().String()
+
+	// Return the identity pair
+	response := GenerateIdentityResponse{
+		Identity:  identity.String(),
+		Recipient: recipient,
+	}
+
+	logrus.Debug("Successfully generated new age identity pair")
+
+	return c.JSON(http.StatusOK, response)
 }
 
 // BackupFileInfo represents metadata about a backup file

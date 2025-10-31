@@ -60,3 +60,8 @@ export interface WebSocketMessage {
 export interface OperationStartResponse {
   operationId: string;
 }
+
+export interface GenerateIdentityResponse {
+  identity: string;
+  recipient: string;
+}

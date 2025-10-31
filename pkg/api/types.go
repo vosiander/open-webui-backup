@@ -1,28 +1,23 @@
 package api
 
-import "time"
+import (
+	"time"
+)
 
-// BackupRequest represents a request to create a backup
-type BackupRequest struct {
-	OutputFilename    string            `json:"outputFilename"`
-	EncryptRecipients []string          `json:"encryptRecipients"`
-	DataTypes         DataTypeSelection `json:"dataTypes"`
+// Config represents the application configuration
+type Config struct {
+	OpenWebUIBaseURL string `json:"openWebUIBaseURL"`
+	AgeIdentity      string `json:"ageIdentity"`
+	AgeRecipients    string `json:"ageRecipients"`
+	Passphrase       string `json:"passphrase"`
 }
 
-// RestoreRequest represents a request to restore from a backup
-type RestoreRequest struct {
-	InputFilename   string            `json:"inputFilename"`
-	DecryptIdentity string            `json:"decryptIdentity"`
-	DataTypes       DataTypeSelection `json:"dataTypes"`
-	Overwrite       bool              `json:"overwrite"`
-}
-
-// DataTypeSelection specifies which data types to include in backup/restore
+// DataTypeSelection represents the selection of data types for backup/restore
 type DataTypeSelection struct {
-	Prompts   bool `json:"prompts"`
-	Tools     bool `json:"tools"`
 	Knowledge bool `json:"knowledge"`
 	Models    bool `json:"models"`
+	Tools     bool `json:"tools"`
+	Prompts   bool `json:"prompts"`
 	Files     bool `json:"files"`
 	Chats     bool `json:"chats"`
 	Users     bool `json:"users"`
@@ -30,12 +25,32 @@ type DataTypeSelection struct {
 	Feedbacks bool `json:"feedbacks"`
 }
 
-// OperationStatus represents the current status of a backup or restore operation
+// BackupRequest represents a backup operation request
+type BackupRequest struct {
+	OutputFilename    string            `json:"outputFilename"`
+	EncryptRecipients []string          `json:"encryptRecipients"`
+	DataTypes         DataTypeSelection `json:"dataTypes"`
+}
+
+// RestoreRequest represents a restore operation request
+type RestoreRequest struct {
+	InputFilename   string            `json:"inputFilename"`
+	DecryptIdentity string            `json:"decryptIdentity"`
+	DataTypes       DataTypeSelection `json:"dataTypes"`
+	Overwrite       bool              `json:"overwrite"`
+}
+
+// OperationStartResponse represents the response when starting an operation
+type OperationStartResponse struct {
+	OperationID string `json:"operationId"`
+}
+
+// OperationStatus represents the status of an operation
 type OperationStatus struct {
 	ID         string     `json:"id"`
-	Type       string     `json:"type"`     // "backup" or "restore"
-	Status     string     `json:"status"`   // "running", "completed", "failed"
-	Progress   int        `json:"progress"` // 0-100
+	Type       string     `json:"type"`
+	Status     string     `json:"status"`
+	Progress   int        `json:"progress"`
 	Message    string     `json:"message"`
 	StartTime  time.Time  `json:"startTime"`
 	EndTime    *time.Time `json:"endTime,omitempty"`
@@ -43,7 +58,12 @@ type OperationStatus struct {
 	OutputFile string     `json:"outputFile,omitempty"`
 }
 
-// ConfigResponse represents the application configuration for the frontend
+// ErrorResponse represents an error response
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// ConfigResponse represents the configuration response
 type ConfigResponse struct {
 	OpenWebUIURL         string   `json:"openWebUIURL"`
 	APIKey               string   `json:"apiKey,omitempty"`
@@ -56,19 +76,20 @@ type ConfigResponse struct {
 	AvailableBackups     []string `json:"availableBackups"`
 }
 
-// UpdateConfigRequest represents a request to update the configuration
+// UpdateConfigRequest represents a configuration update request
 type UpdateConfigRequest struct {
-	OpenWebUIURL *string `json:"openWebUIURL,omitempty"`
-	APIKey       *string `json:"apiKey,omitempty"`
+	OpenWebUIURL string `json:"openWebUIURL,omitempty"`
+	APIKey       string `json:"apiKey,omitempty"`
 }
 
-// WebSocketMessage represents a message sent over the WebSocket connection
+// WebSocketMessage represents a WebSocket message
 type WebSocketMessage struct {
-	Type    string      `json:"type"` // "status", "progress", "log"
+	Type    string      `json:"type"`
 	Payload interface{} `json:"payload"`
 }
 
-// OperationStartResponse represents the response when starting an operation
-type OperationStartResponse struct {
-	OperationID string `json:"operationId"`
+// GenerateIdentityResponse contains a newly generated age identity pair
+type GenerateIdentityResponse struct {
+	Identity  string `json:"identity"`  // Private key (AGE-SECRET-KEY-...)
+	Recipient string `json:"recipient"` // Public key (age1...)
 }

@@ -349,6 +349,172 @@ func (s *Server) handleDeleteBackup(c echo.Context) error {
 	})
 }
 
+// handleVerifyBackup verifies that a backup file can be decrypted with the provided identity
+func (s *Server) handleVerifyBackup(c echo.Context) error {
+	var req struct {
+		Filename        string `json:"filename"`
+		DecryptIdentity string `json:"decryptIdentity"`
+	}
+
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validate request
+	if req.Filename == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Filename is required",
+		})
+	}
+
+	// Validate filename (prevent path traversal)
+	if strings.Contains(req.Filename, "..") || strings.Contains(req.Filename, "/") {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Invalid filename",
+		})
+	}
+
+	// Build full path
+	filePath := filepath.Join(s.config.BackupsDir, req.Filename)
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "Backup file not found",
+		})
+	}
+
+	// Check if file is encrypted
+	if !encryption.IsEncrypted(filePath) {
+		return c.JSON(http.StatusOK, map[string]string{
+			"success": "true",
+			"message": "File is not encrypted - verification not needed",
+		})
+	}
+
+	// Get identity content
+	var identityContent string
+	if req.DecryptIdentity != "" {
+		// Identity content provided directly from web UI
+		identityContent = req.DecryptIdentity
+		logrus.Debug("Using identity content from request for verification")
+	} else {
+		// Fall back to identity file from environment variable
+		identityPath := os.Getenv("AGE_IDENTITY")
+		if identityPath == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "Encrypted backup requires age identity (set AGE_IDENTITY or provide decryptIdentity)",
+			})
+		}
+
+		// Read the identity file
+		content, err := os.ReadFile(identityPath)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": fmt.Sprintf("Failed to read identity file: %v", err),
+			})
+		}
+		identityContent = string(content)
+		logrus.Debugf("Using identity from file for verification: %s", identityPath)
+	}
+
+	// Create a temporary file for verification (will be immediately deleted)
+	tempFile := filePath + ".verify.tmp"
+	defer os.Remove(tempFile) // Ensure cleanup
+
+	// Attempt to decrypt the file
+	if err := encryption.DecryptFileWithIdentities(filePath, tempFile, []string{identityContent}); err != nil {
+		logrus.WithError(err).Warnf("Verification failed for file: %s", req.Filename)
+		return c.JSON(http.StatusOK, map[string]string{
+			"success": "false",
+			"message": fmt.Sprintf("Verification failed: %v", err),
+		})
+	}
+
+	// Clean up temp file
+	os.Remove(tempFile)
+
+	logrus.Infof("Backup verification successful: %s", req.Filename)
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"success": "true",
+		"message": "Backup verified successfully - decryption key is correct",
+	})
+}
+
+// handleUploadBackup handles file upload for backup files
+func (s *Server) handleUploadBackup(c echo.Context) error {
+	// Get the uploaded file
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "No file uploaded",
+		})
+	}
+
+	// Validate filename
+	filename := filepath.Base(file.Filename)
+	if !strings.HasSuffix(filename, ".age") && !strings.HasSuffix(filename, ".zip") {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Only .age and .zip files are allowed",
+		})
+	}
+
+	// Prevent path traversal
+	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Invalid filename",
+		})
+	}
+
+	// Ensure backups directory exists
+	if err := os.MkdirAll(s.config.BackupsDir, 0755); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("Failed to create backups directory: %v", err),
+		})
+	}
+
+	// Open uploaded file
+	src, err := file.Open()
+	if err != nil {
+		logrus.WithError(err).Error("Failed to read uploaded file")
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to read uploaded file",
+		})
+	}
+	defer src.Close()
+
+	// Create destination file
+	dstPath := filepath.Join(s.config.BackupsDir, filename)
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to create destination file")
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to save file",
+		})
+	}
+	defer dst.Close()
+
+	// Copy file
+	written, err := dst.ReadFrom(src)
+	if err != nil {
+		os.Remove(dstPath) // Clean up on error
+		logrus.WithError(err).Error("Failed to save uploaded file")
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to save file",
+		})
+	}
+
+	logrus.Infof("Uploaded backup file: %s (size: %d bytes)", filename, written)
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"message":  "File uploaded successfully",
+		"filename": filename,
+	})
+}
+
 // listBackupFiles returns a list of backup files in the specified directory
 func listBackupFiles(dir string) ([]string, error) {
 	// Ensure directory exists

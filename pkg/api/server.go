@@ -60,6 +60,8 @@ func (s *Server) setupRoutes() {
 		api.POST("/restore", s.handleStartRestore)
 		api.GET("/status/:id", s.handleGetStatus)
 		api.GET("/backups", s.handleListBackups)
+		api.POST("/backups/upload", s.handleUploadBackup)
+		api.POST("/backups/verify", s.handleVerifyBackup)
 		api.GET("/backups/:filename", s.handleDownloadBackup)
 		api.DELETE("/backups/:filename", s.handleDeleteBackup)
 		api.POST("/identity/generate", s.handleGenerateIdentity)

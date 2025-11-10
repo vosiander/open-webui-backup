@@ -8,6 +8,7 @@
         :status="currentOperation"
         :formError="formError"
         :formSuccess="formSuccess"
+        :formSuccessMessage="formSuccessMessage"
       />
     </div>
 
@@ -24,6 +25,7 @@
           :ageIdentity="ageIdentity"
           @operation-started="handleOperationStarted"
           @operation-error="handleOperationError"
+          @operation-success="handleOperationSuccess"
         />
       </div>
     </div>
@@ -62,6 +64,7 @@ const currentOperation = ref<OperationStatus | null>(null);
 const backupListRef = ref<InstanceType<typeof BackupList> | null>(null);
 const formError = ref<string | null>(null);
 const formSuccess = ref<{ operationId: string; type: string } | null>(null);
+const formSuccessMessage = ref<string | null>(null);
 const isConfigModalOpen = ref(false);
 const isIdentityGeneratorModalOpen = ref(false);
 const ageIdentity = ref('');
@@ -103,8 +106,9 @@ const handleAgeRecipientsUpdate = (value: string) => {
 const handleOperationStarted = (payload: { operationId: string; type: string }) => {
   console.log('Operation started:', payload);
   
-  // Clear any previous errors
+  // Clear any previous errors and success messages
   formError.value = null;
+  formSuccessMessage.value = null;
   
   // Show success message
   formSuccess.value = payload;
@@ -118,8 +122,9 @@ const handleOperationStarted = (payload: { operationId: string; type: string }) 
 const handleOperationError = (payload: { message: string; type: string }) => {
   console.log('Operation error:', payload);
   
-  // Clear any previous success
+  // Clear any previous success messages
   formSuccess.value = null;
+  formSuccessMessage.value = null;
   
   // Show error message
   formError.value = payload.message;
@@ -128,6 +133,21 @@ const handleOperationError = (payload: { message: string; type: string }) => {
   setTimeout(() => {
     formError.value = null;
   }, 8000);
+};
+
+const handleOperationSuccess = (payload: { message: string; type: string }) => {
+  console.log('Operation success:', payload);
+  
+  // Clear any previous errors
+  formError.value = null;
+  
+  // Show success message
+  formSuccessMessage.value = payload.message;
+  
+  // Clear success message after delay
+  setTimeout(() => {
+    formSuccessMessage.value = null;
+  }, 5000);
 };
 
 onMounted(() => {

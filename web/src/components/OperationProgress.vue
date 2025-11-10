@@ -23,7 +23,11 @@
       {{ formSuccess.type === 'backup' ? 'Backup' : 'Restore' }} started successfully! Operation ID: {{ formSuccess.operationId }}
     </div>
 
-    <div v-if="!status && !formError && !formSuccess" class="ready-message">
+    <div v-if="formSuccessMessage" class="alert alert-success">
+      {{ formSuccessMessage }}
+    </div>
+
+    <div v-if="!status && !formError && !formSuccess && !formSuccessMessage" class="ready-message">
       No operations currently running. Start a backup or restore to see progress here.
     </div>
 
@@ -61,6 +65,7 @@ interface Props {
   status: OperationStatus | null;
   formError: string | null;
   formSuccess: { operationId: string; type: string } | null;
+  formSuccessMessage: string | null;
 }
 
 const props = defineProps<Props>();

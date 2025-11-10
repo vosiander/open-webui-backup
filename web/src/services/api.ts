@@ -114,6 +114,67 @@ export async function deleteBackup(filename: string): Promise<void> {
   });
 }
 
+export async function uploadBackup(file: File): Promise<{ filename: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE}/backups/upload`, {
+    method: 'POST',
+    body: formData,
+    // Don't set Content-Type header - let browser set it with boundary
+  });
+
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.error) {
+        errorMessage = errorData.error;
+      }
+    } catch {
+      // Ignore JSON parse errors for error responses
+    }
+    throw new APIError(errorMessage, response.status);
+  }
+
+  return await response.json();
+}
+
+export async function verifyBackup(
+  filename: string,
+  identity: string
+): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`${API_BASE}/backups/verify`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      filename,
+      decryptIdentity: identity,
+    }),
+  });
+
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.error) {
+        errorMessage = errorData.error;
+      }
+    } catch {
+      // Ignore JSON parse errors for error responses
+    }
+    throw new APIError(errorMessage, response.status);
+  }
+
+  const data = await response.json();
+  return {
+    success: data.success === 'true',
+    message: data.message || '',
+  };
+}
+
 export async function generateIdentity(): Promise<GenerateIdentityResponse> {
   return fetchJSON<GenerateIdentityResponse>(`${API_BASE}/identity/generate`, {
     method: 'POST',

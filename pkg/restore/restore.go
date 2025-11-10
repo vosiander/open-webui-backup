@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -13,6 +14,18 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vosiander/open-webui-backup/pkg/openwebui"
 )
+
+// isAuthError checks if an error is a 401 authentication error
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var apiErr *openwebui.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == 401
+	}
+	return false
+}
 
 // ProgressCallback is a function that receives progress updates during restore operations
 type ProgressCallback func(percent int, message string)
@@ -1704,7 +1717,13 @@ func restoreSingleModelFromUnified(r *zip.ReadCloser, client *openwebui.Client, 
 			// Import model
 			logrus.Infof("  Restoring model: %s", model.Name)
 			models := []openwebui.Model{model}
-			return client.ImportModels(models)
+			if err := client.ImportModels(models); err != nil {
+				if isAuthError(err) {
+					return fmt.Errorf("authentication failed - please check your API key: %w", err)
+				}
+				return err
+			}
+			return nil
 		}
 	}
 	return fmt.Errorf("model.json not found for %s", modelID)
@@ -1928,6 +1947,9 @@ func restoreChatsFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwr
 
 				logrus.Infof("  Restoring chat: %s", chat.Title)
 				if err := client.ImportChat(&chat); err != nil {
+					if isAuthError(err) {
+						return fmt.Errorf("authentication failed - please check your API key: %w", err)
+					}
 					logrus.Warnf("  Failed to restore chat %s: %v", chat.Title, err)
 				}
 			}
@@ -2005,6 +2027,9 @@ func restoreUsersFromUnified(r *zip.ReadCloser, client *openwebui.Client, overwr
 				}
 
 				if err := client.ImportUser(userForm); err != nil {
+					if isAuthError(err) {
+						return fmt.Errorf("authentication failed - please check your API key: %w", err)
+					}
 					logrus.Warnf("  Failed to restore user %s: %v", user.Email, err)
 				} else {
 					logrus.Infof("  ⚠️  User %s requires password reset", user.Email)
@@ -2129,6 +2154,9 @@ func restoreGroupsFromUnified(r *zip.ReadCloser, client *openwebui.Client, overw
 				}
 
 				if _, err := client.CreateGroup(groupForm); err != nil {
+					if isAuthError(err) {
+						return fmt.Errorf("authentication failed - please check your API key: %w", err)
+					}
 					logrus.Warnf("  Failed to restore group %s: %v", group.Name, err)
 				}
 			}
@@ -2253,6 +2281,9 @@ func restoreFeedbacksFromUnified(r *zip.ReadCloser, client *openwebui.Client, ov
 				}
 
 				if _, err := client.CreateFeedback(feedbackForm); err != nil {
+					if isAuthError(err) {
+						return fmt.Errorf("authentication failed - please check your API key: %w", err)
+					}
 					logrus.Warnf("  Failed to restore feedback %s: %v", feedback.ID, err)
 				}
 			}

@@ -4,7 +4,35 @@
 
     <form @submit.prevent="handleSubmit">
       <div class="form-group">
-        <label for="backupFile">Backup File *</label>
+        <label>Upload Backup File</label>
+        <div class="upload-container">
+          <input
+            type="file"
+            ref="fileInput"
+            accept=".age,.zip"
+            @change="handleFileSelected"
+            class="file-input"
+            :disabled="isUploading"
+          />
+          <button
+            type="button"
+            @click="triggerFileInput"
+            class="btn btn-secondary"
+            :disabled="isUploading"
+          >
+            <span v-if="isUploading">Uploading...</span>
+            <span v-else>Choose File to Upload</span>
+          </button>
+          <span v-if="selectedFile" class="file-name">{{ selectedFile.name }}</span>
+        </div>
+      </div>
+
+      <div class="divider">
+        <span>OR</span>
+      </div>
+
+      <div class="form-group">
+        <label for="backupFile">Select Existing Backup *</label>
         <select
           id="backupFile"
           v-model="selectedBackup"
@@ -26,6 +54,15 @@
 
       <div class="form-actions">
         <button
+          type="button"
+          @click="handleVerify"
+          class="btn btn-verify"
+          :disabled="isVerifying || !selectedBackup"
+        >
+          <span v-if="isVerifying">Verifying...</span>
+          <span v-else>Verify Backup</span>
+        </button>
+        <button
           type="submit"
           class="btn btn-primary"
           :disabled="isSubmitting || !selectedBackup || !hasSelectedTypes"
@@ -41,7 +78,7 @@
 <script setup lang="ts">
 import {computed, onMounted, ref} from 'vue';
 import DataTypeSelector from './DataTypeSelector.vue';
-import {type BackupFile, listBackups, startRestore} from '../services/api';
+import {type BackupFile, listBackups, startRestore, uploadBackup, verifyBackup} from '../services/api';
 import type {DataTypeSelection, RestoreRequest} from '../types/api';
 
 const props = defineProps<{
@@ -51,10 +88,16 @@ const props = defineProps<{
 const emit = defineEmits<{
   'operation-started': [payload: { operationId: string; type: string }];
   'operation-error': [payload: { message: string; type: string }];
+  'operation-success': [payload: { message: string; type: string }];
 }>();
 
 const backups = ref<BackupFile[]>([]);
 const selectedBackup = ref('');
+const fileInput = ref<HTMLInputElement | null>(null);
+const selectedFile = ref<File | null>(null);
+const isUploading = ref(false);
+const isVerifying = ref(false);
+const verificationStatus = ref<{ success: boolean; message: string } | null>(null);
 const dataTypes = ref<DataTypeSelection>({
   chats: true,
   prompts: true,
@@ -103,6 +146,94 @@ const loadBackups = async () => {
       message: err instanceof Error ? err.message : 'Failed to load backups',
       type: 'restore'
     });
+  }
+};
+
+const triggerFileInput = () => {
+  fileInput.value?.click();
+};
+
+const handleFileSelected = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+
+  if (!file) return;
+
+  selectedFile.value = file;
+
+  // Validate file extension
+  if (!file.name.endsWith('.age') && !file.name.endsWith('.zip')) {
+    emit('operation-error', {
+      message: 'Only .age and .zip files are allowed',
+      type: 'restore'
+    });
+    selectedFile.value = null;
+    return;
+  }
+
+  // Upload immediately
+  isUploading.value = true;
+
+  try {
+    await uploadBackup(file);
+
+    // Refresh backup list
+    await loadBackups();
+
+    // Clear file input
+    selectedFile.value = null;
+    if (fileInput.value) {
+      fileInput.value.value = '';
+    }
+  } catch (err) {
+    emit('operation-error', {
+      message: err instanceof Error ? err.message : 'Failed to upload file',
+      type: 'restore'
+    });
+  } finally {
+    isUploading.value = false;
+  }
+};
+
+const handleVerify = async () => {
+  if (!selectedBackup.value) {
+    emit('operation-error', {
+      message: 'Please select a backup file to verify',
+      type: 'restore'
+    });
+    return;
+  }
+
+  isVerifying.value = true;
+  verificationStatus.value = null;
+
+  try {
+    const result = await verifyBackup(selectedBackup.value, props.ageIdentity || '');
+    verificationStatus.value = result;
+
+    if (!result.success) {
+      emit('operation-error', {
+        message: result.message,
+        type: 'restore'
+      });
+    } else {
+      emit('operation-success', {
+        message: result.message,
+        type: 'restore'
+      });
+    }
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Failed to verify backup';
+    verificationStatus.value = {
+      success: false,
+      message: errorMsg
+    };
+    emit('operation-error', {
+      message: errorMsg,
+      type: 'restore'
+    });
+  } finally {
+    isVerifying.value = false;
   }
 };
 
@@ -242,5 +373,73 @@ select.form-input {
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.upload-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.file-input {
+  display: none;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+  padding: 0.625rem 1.25rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #5a6268;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.file-name {
+  color: #495057;
+  font-size: 0.875rem;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.divider span {
+  padding: 0 1rem;
+  color: #6c757d;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.btn-verify {
+  background: #28a745;
+  color: white;
+}
+
+.btn-verify:hover:not(:disabled) {
+  background: #218838;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 </style>

@@ -211,6 +211,57 @@ task run -- backup --out test.zip
 go test -v ./...
 ```
 
+## Releases
+
+The project uses GitHub Actions to automatically build cross-platform binaries when a tag is pushed.
+
+### Creating a Release
+
+1. **Tag the release:**
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+2. **Workflow builds:**
+   - Linux (x64, ARM64)
+   - macOS (x64, ARM64)
+   - Windows (x64, ARM64)
+
+3. **GitHub Release created with:**
+   - Compressed binaries (`.tar.gz` for Unix, `.zip` for Windows)
+   - SHA256 checksums
+   - Auto-generated release notes
+   - Version info embedded in binaries
+
+### Testing a Release
+
+```bash
+# Create and push a test tag
+git tag v0.0.1-test
+git push origin v0.0.1-test
+
+# Watch the workflow at:
+# https://github.com/vosiander/open-webui-backup/actions
+
+# Download and verify
+wget https://github.com/vosiander/open-webui-backup/releases/download/v0.0.1-test/owuiback-v0.0.1-test-linux-amd64.tar.gz
+tar -xzf owuiback-v0.0.1-test-linux-amd64.tar.gz
+./owuiback-linux-amd64 --version
+
+# Verify checksum
+wget https://github.com/vosiander/open-webui-backup/releases/download/v0.0.1-test/checksums.txt
+sha256sum -c checksums.txt --ignore-missing
+```
+
+### Version Information
+
+Binaries include embedded version information accessible via `--version` flag:
+- Git tag version
+- Git commit hash
+- Build date
+- Go version used
+
 ## Architecture
 
 - **Go Backend** - CLI and web server
@@ -246,4 +297,3 @@ See LICENSE file.
 ## Contributing
 
 Contributions welcome! Fork, create feature branch, add tests, submit PR.
-

@@ -23,38 +23,135 @@ task build
 
 ## Quick Start
 
-### 1. Generate Age Keys (One-Time)
+### Simplified Workflow (Recommended)
+
+The new `full-backup` and `verify` commands handle age key management automatically:
 
 ```bash
-age-keygen -o ~/.age/identity.txt
-age-keygen -y ~/.age/identity.txt > ~/.age/recipient.txt
-chmod 600 ~/.age/identity.txt
-```
-
-### 2. Configure Environment
-
-```bash
+# 1. Set up environment
 export OPEN_WEBUI_URL="https://your-instance.com"
 export OPEN_WEBUI_API_KEY="sk-your-api-key"
-export OWUI_ENCRYPTED_RECIPIENT=$(cat ~/.age/recipient.txt)
-export OWUI_DECRYPT_IDENTITY="$HOME/.age/identity.txt"
+
+# 2. Create backup (generates keys automatically)
+./owuiback full-backup --path ./backups
+
+# 3. Verify backup
+./owuiback verify --path ./backups
+
+# 4. Restore backup (when needed)
+./owuiback restore --file ./backups/backup-*.zip.age \
+    --decrypt-identity ./backups/identity.txt
 ```
 
-### 3. Backup & Restore
+### Advanced Workflow (Manual Key Management)
 
 ```bash
-# Create backup
+# 1. Generate Age Keys (One-Time)
+./owuiback new-identity --path ./my-keys
+# Or use age-keygen:
+# age-keygen -o ~/.age/identity.txt
+# age-keygen -y ~/.age/identity.txt > ~/.age/recipient.txt
+
+# 2. Configure Environment
+export OPEN_WEBUI_URL="https://your-instance.com"
+export OPEN_WEBUI_API_KEY="sk-your-api-key"
+export OWUI_ENCRYPTED_RECIPIENT=$(cat ./my-keys/recipient.txt)
+export OWUI_DECRYPT_IDENTITY="./my-keys/identity.txt"
+
+# 3. Create backup
 ./owuiback backup --out ./backups/full.zip
 
-# Restore backup
+# 4. Restore backup
 ./owuiback restore --file ./backups/full.zip.age
 
-# Web interface
+# 5. Web interface
 ./owuiback serve
 # Open http://localhost:8080
 ```
 
 ## Commands
+
+### new-identity
+
+Generate a new age identity keypair and save to files.
+
+```bash
+# Generate new identity in specified directory
+./owuiback new-identity --path ./my-keys
+
+# Identity files created:
+# - identity.txt (private key, 600 permissions)
+# - recipient.txt (public key)
+```
+
+**Flags:**
+- `--path` - Directory to save identity files (required)
+
+**Notes:**
+- Will not overwrite existing identity files
+- Private key saved with restrictive 600 permissions
+- Prints example environment variable commands
+
+### full-backup
+
+Create a backup with automatic age encryption and identity management.
+
+```bash
+# Full backup (generates keys if needed)
+./owuiback full-backup --path ./backups
+
+# Selective backup
+./owuiback full-backup --path ./backups --knowledge --models
+./owuiback full-backup --path ./backups --prompts --tools
+
+# All files in same directory:
+# - identity.txt (created if missing)
+# - recipient.txt (created if missing)
+# - backup-YYYYMMDD-HHMMSS.zip.age
+```
+
+**Flags:**
+- `--path` - Directory for identity files and backup output (required)
+- `--prompts`, `--tools`, `--knowledge`, `--models`, `--files`, `--chats`, `--users`, `--groups`, `--feedbacks` - Selective types (default: all)
+
+**Features:**
+- Auto-generates identity keypair if missing
+- Reuses existing identity if present
+- Creates timestamped backup files
+- Automatic encryption with generated keys
+- No need to manage recipients manually
+
+### verify
+
+Verify that a backup file can be decrypted and optionally validate its contents.
+
+```bash
+# Verify newest backup in directory
+./owuiback verify --path ./backups
+
+# Verify specific backup file
+./owuiback verify --path ./backups --file backup-20240101-120000.zip.age
+
+# Only check decryption (skip content validation)
+./owuiback verify --path ./backups --only-encryption
+
+# Verify shows:
+# - Decryption success/failure
+# - Backup metadata (type, timestamp, version)
+# - Item counts by type
+```
+
+**Flags:**
+- `--path` - Directory containing identity.txt and backup files (required)
+- `--file` - Specific backup file to verify (optional, auto-detects newest .age file)
+- `--only-encryption` - Only verify decryption, skip content validation
+
+**Features:**
+- Auto-detects newest backup if --file not specified
+- Validates ZIP structure and metadata
+- Counts items by type
+- Works with both encrypted and unencrypted backups
+- Temporary files automatically cleaned up
 
 ### backup
 

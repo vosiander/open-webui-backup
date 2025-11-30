@@ -89,6 +89,15 @@ tasks:
       - age-keygen -o {{.AGE_IDENTITY_FILE}}
       - age-keygen -y {{.AGE_IDENTITY_FILE}} > {{.AGE_RECIPIENT_FILE}}
 
+  full-backup:
+    desc: Runs backup-all without encryption
+    silent: true
+    cmds:
+      - mkdir -p ./backups/full-backup/
+      - go run cmd/owuiback/main.go full-backup --path ./backups/full-backup/
+      - go run cmd/owuiback/main.go verify --path ./backups/full-backup/
+
+
   docker-build:
     desc: Build the Docker image
     cmd: docker build -t owuiback:latest .

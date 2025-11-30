@@ -5,6 +5,7 @@ vars:
   AGE_FILE_PATH: "{{.CURRENT_DIR}}/"
   AGE_IDENTITY_FILE: "{{.AGE_FILE_PATH}}/identity.txt"
   AGE_RECIPIENT_FILE: "{{.AGE_FILE_PATH}}/recipient.txt"
+  FULL_BACKUP_PATH: "{{.CURRENT_DIR}}/backups/full-backup/"
 
 dotenv:
   - .env
@@ -93,10 +94,17 @@ tasks:
     desc: Runs backup-all without encryption
     silent: true
     cmds:
-      - mkdir -p ./backups/full-backup/
-      - go run cmd/owuiback/main.go full-backup --path ./backups/full-backup/
-      - go run cmd/owuiback/main.go verify --path ./backups/full-backup/
+      - mkdir -p {{.FULL_BACKUP_PATH}}
+      - go run cmd/owuiback/main.go full-backup --path {{.FULL_BACKUP_PATH}}
+      - go run cmd/owuiback/main.go verify --path {{.FULL_BACKUP_PATH}}
 
+  full-backup-decrypt:
+    desc: Decrypts all .age files in the full backup directory
+    silent: true
+    cmds:
+      - mkdir -p {{.FULL_BACKUP_PATH}}
+      - go run cmd/owuiback/main.go verify --path {{.FULL_BACKUP_PATH}}
+      - go run cmd/owuiback/main.go decrypt --path {{.FULL_BACKUP_PATH}}
 
   docker-build:
     desc: Build the Docker image

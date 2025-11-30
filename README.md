@@ -153,6 +153,46 @@ Verify that a backup file can be decrypted and optionally validate its contents.
 - Works with both encrypted and unencrypted backups
 - Temporary files automatically cleaned up
 
+### decrypt
+
+Decrypt all .age encrypted files in a directory using identity.txt.
+
+```bash
+# Decrypt all .age files in directory
+./owuiback decrypt --path ./backups
+
+# Decrypt with force overwrite
+./owuiback decrypt --path ./backups --force
+
+# Output example:
+# Decrypting 3 file(s) from ./backups
+#
+# ✓ backup-20240101-120000.zip.age → backup-20240101-120000.zip
+# ⊘ data.zip.age → skipped (data.zip already exists, use --force)
+# ✓ archive.zip.age → archive.zip
+#
+# ──────────────────────────────────────────────────
+# Summary: 2 decrypted, 1 skipped, 0 failed
+```
+
+**Flags:**
+- `--path` - Directory containing identity.txt and .age files to decrypt (required)
+- `--force` - Overwrite existing decrypted files (optional)
+
+**Features:**
+- Automatically finds all .age files in directory
+- Uses identity.txt from the specified path
+- Validates files are actually encrypted before decrypting
+- Skips files where decrypted version already exists (unless --force)
+- Removes .age extension from output files
+- Provides detailed progress and summary statistics
+- Continues on error, reporting failures at the end
+
+**Use Cases:**
+- Bulk decryption of backup archives
+- Preparing encrypted files for manual inspection
+- Decrypting files for use with other tools
+
 ### backup
 
 Create an encrypted backup of Open WebUI data.

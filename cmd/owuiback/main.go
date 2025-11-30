@@ -40,6 +40,7 @@ func run() error {
 	registry.Register(plugins.NewNewIdentityPlugin())
 	registry.Register(plugins.NewVerifyPlugin())
 	registry.Register(plugins.NewFullBackupPlugin())
+	registry.Register(plugins.NewDecryptPlugin())
 
 	// Create root command
 	rootCmd := &cobra.Command{

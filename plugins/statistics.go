@@ -145,7 +145,7 @@ func (p *StatisticsPlugin) Execute(cfg *config.Config) error {
 	if p.verbose {
 		logrus.Info("Fetching chats...")
 	}
-	chats, err := client.GetAllChats()
+	chats, err := client.GetAllChatsDB()
 	if err != nil {
 		logrus.Warnf("Failed to fetch chats: %v. Continuing with other statistics...", err)
 		stats.ChatsCount = 0

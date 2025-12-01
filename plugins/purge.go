@@ -72,7 +72,7 @@ func (p *PurgePlugin) Execute(cfg *config.Config) error {
 	// Count items
 	counts := make(map[string]int)
 	if purgeAll || p.chats {
-		chats, err := client.GetAllChats()
+		chats, err := client.GetAllChatsDB()
 		if err != nil {
 			logrus.Warnf("Failed to count chats: %v", err)
 		} else {

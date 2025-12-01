@@ -82,13 +82,13 @@ func (p *NewIdentityPlugin) Execute(cfg *config.Config) error {
 	log.Infof("Saved public key to: %s", recipientPath)
 
 	// Print usage information
-	fmt.Println("\n✓ Identity keypair generated successfully!")
-	fmt.Println("\nTo use with backup commands, set these environment variables:")
-	fmt.Printf("  export BACKUP_ENCRYPTION_RECIPIENT=\"%s\"\n", publicKey)
-	fmt.Printf("  export BACKUP_ENCRYPTION_IDENTITY=\"%s\"\n", identityPath)
-	fmt.Println("\nOr use the new 'full-backup' command which uses these files automatically:")
-	fmt.Printf("  owuiback full-backup --path %s\n", p.path)
-	fmt.Println("\nIMPORTANT: Keep identity.txt secure - it's needed to decrypt your backups!")
+	logrus.Info("✓ Identity keypair generated successfully!")
+	logrus.Info("To use with backup commands, set these environment variables:")
+	logrus.Infof("  export BACKUP_ENCRYPTION_RECIPIENT=\"%s\"", publicKey)
+	logrus.Infof("  export BACKUP_ENCRYPTION_IDENTITY=\"%s\"", identityPath)
+	logrus.Info("Or use the new 'full-backup' command which uses these files automatically:")
+	logrus.Infof("  owuiback full-backup --path %s", p.path)
+	logrus.Info("IMPORTANT: Keep identity.txt secure - it's needed to decrypt your backups!")
 
 	return nil
 }

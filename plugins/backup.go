@@ -136,10 +136,10 @@ func (p *BackupPlugin) Execute(cfg *config.Config) error {
 	if includeDatabase {
 		if err := p.addDatabaseBackupToZip(tempFile); err != nil {
 			logrus.Warnf("Database backup skipped: %v", err)
-			fmt.Printf("\n⚠️  Database backup skipped: %v\n", err)
+			logrus.Warnf("⚠️  Database backup skipped: %v", err)
 		} else {
 			logrus.Info("Database backup included")
-			fmt.Println("✓ Database backup included")
+			logrus.Info("✓ Database backup included")
 		}
 	}
 

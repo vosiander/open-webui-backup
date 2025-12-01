@@ -40,6 +40,7 @@ func run() error {
 	registry.Register(plugins.NewVerifyPlugin())
 	registry.Register(plugins.NewFullBackupPlugin())
 	registry.Register(plugins.NewDecryptPlugin())
+	registry.Register(plugins.NewStatisticsPlugin())
 
 	// Register database backup plugins
 	registry.Register(plugins.NewBackupDatabasePlugin())

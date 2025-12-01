@@ -429,7 +429,7 @@ ORDER BY type, name;
 		}
 
 		logrus.Info("Objects that would be deleted:")
-		fmt.Println(string(output))
+		logrus.Info(string(output))
 		return nil
 	}
 

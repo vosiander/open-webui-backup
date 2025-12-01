@@ -175,7 +175,7 @@ func (p *PurgePlugin) Execute(cfg *config.Config) error {
 
 	// Display what will be deleted
 	if !p.force {
-		logrus.Info("\n[Dry Run] Would delete the following:")
+		logrus.Info("[Dry Run] Would delete the following:")
 		for resource, count := range counts {
 			if count > 0 {
 				logrus.Infof("  - %s: %d items", resource, count)

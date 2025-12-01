@@ -83,9 +83,9 @@ func (p *FullBackupPlugin) Execute(cfg *config.Config) error {
 	}
 
 	if newlyGenerated {
-		fmt.Println("\n✓ Generated new age identity keypair")
+		logrus.Info("✓ Generated new age identity keypair")
 	} else {
-		fmt.Println("\n✓ Using existing age identity keypair")
+		logrus.Info("✓ Using existing age identity keypair")
 	}
 
 	// Create client
@@ -148,9 +148,9 @@ func (p *FullBackupPlugin) Execute(cfg *config.Config) error {
 	if includeDatabase {
 		if err := p.addDatabaseBackupToZip(tempFile, log); err != nil {
 			logrus.Warnf("Database backup skipped: %v", err)
-			fmt.Printf("\n⚠️  Database backup skipped: %v\n", err)
+			logrus.Warnf("⚠️  Database backup skipped: %v", err)
 		} else {
-			fmt.Println("✓ Database backup included")
+			logrus.Info("✓ Database backup included")
 		}
 	}
 
@@ -168,14 +168,14 @@ func (p *FullBackupPlugin) Execute(cfg *config.Config) error {
 	os.Remove(tempFile)
 
 	// Print success message
-	fmt.Printf("\n✓ Backup completed successfully!\n\n")
-	fmt.Println("Files created:")
-	fmt.Printf("  Identity (private key): %s\n", filepath.Join(p.path, "identity.txt"))
-	fmt.Printf("  Recipient (public key): %s\n", filepath.Join(p.path, "recipient.txt"))
-	fmt.Printf("  Backup: %s\n", backupPath)
-	fmt.Println("\nTo verify your backup:")
-	fmt.Printf("  owuiback verify --path %s\n", p.path)
-	fmt.Println("\nIMPORTANT: Keep identity.txt secure - it's needed to decrypt and restore your backup!")
+	logrus.Info("✓ Backup completed successfully!\n")
+	logrus.Info("Files created:")
+	logrus.Infof("  Identity (private key): %s", filepath.Join(p.path, "identity.txt"))
+	logrus.Infof("  Recipient (public key): %s", filepath.Join(p.path, "recipient.txt"))
+	logrus.Infof("  Backup: %s", backupPath)
+	logrus.Info("To verify your backup:")
+	logrus.Infof("  owuiback verify --path %s", p.path)
+	logrus.Info("IMPORTANT: Keep identity.txt secure - it's needed to decrypt and restore your backup!")
 
 	return nil
 }

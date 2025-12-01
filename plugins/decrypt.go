@@ -61,11 +61,11 @@ func (p *DecryptPlugin) Execute(cfg *config.Config) error {
 	}
 
 	if len(encryptedFiles) == 0 {
-		fmt.Printf("\n⚠️  No .age files found in %s\n", p.path)
+		logrus.Warnf("⚠️  No .age files found in %s", p.path)
 		return nil
 	}
 
-	fmt.Printf("\nDecrypting %d file(s) from %s\n\n", len(encryptedFiles), p.path)
+	logrus.Infof("Decrypting %d file(s) from %s\n", len(encryptedFiles), p.path)
 
 	// Decrypt each file
 	stats := &decryptStats{}
@@ -76,10 +76,10 @@ func (p *DecryptPlugin) Execute(cfg *config.Config) error {
 	}
 
 	// Print summary
-	fmt.Println("\n" + strings.Repeat("─", 50))
-	fmt.Printf("Summary: %d decrypted, %d skipped, %d failed\n", stats.decrypted, stats.skipped, stats.failed)
+	logrus.Info("" + strings.Repeat("─", 50))
+	logrus.Infof("Summary: %d decrypted, %d skipped, %d failed", stats.decrypted, stats.skipped, stats.failed)
 	if stats.failed > 0 {
-		fmt.Println("\n⚠️  Some files failed to decrypt. Check the logs above for details.")
+		logrus.Warn("⚠️  Some files failed to decrypt. Check the logs above for details.")
 	}
 
 	return nil
@@ -91,7 +91,7 @@ func (p *DecryptPlugin) decryptSingleFile(encryptedPath, identityContent string,
 
 	// Check if file is actually encrypted
 	if !encryption.IsEncrypted(encryptedPath) {
-		fmt.Printf("⊘ %s → skipped (not encrypted)\n", basename)
+		logrus.Infof("⊘ %s → skipped (not encrypted)", basename)
 		stats.skipped++
 		return nil
 	}
@@ -102,19 +102,19 @@ func (p *DecryptPlugin) decryptSingleFile(encryptedPath, identityContent string,
 
 	// Check if output file already exists
 	if _, err := os.Stat(outputPath); err == nil && !p.force {
-		fmt.Printf("⊘ %s → skipped (%s already exists, use --force)\n", basename, outputBasename)
+		logrus.Infof("⊘ %s → skipped (%s already exists, use --force)", basename, outputBasename)
 		stats.skipped++
 		return nil
 	}
 
 	// Decrypt the file
 	if err := encryption.DecryptFileWithIdentities(encryptedPath, outputPath, []string{identityContent}); err != nil {
-		fmt.Printf("❌ %s → failed (%v)\n", basename, err)
+		logrus.Errorf("❌ %s → failed (%v)", basename, err)
 		stats.failed++
 		return err
 	}
 
-	fmt.Printf("✓ %s → %s\n", basename, outputBasename)
+	logrus.Infof("✓ %s → %s", basename, outputBasename)
 	stats.decrypted++
 	return nil
 }

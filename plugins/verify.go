@@ -84,7 +84,7 @@ func (p *VerifyPlugin) Execute(cfg *config.Config) error {
 
 	// Check if file is encrypted
 	if !encryption.IsEncrypted(backupFile) {
-		fmt.Println("\n⚠️  Backup file is not encrypted")
+		logrus.Warn("⚠️  Backup file is not encrypted")
 		if p.onlyEncryption {
 			return nil
 		}
@@ -98,11 +98,11 @@ func (p *VerifyPlugin) Execute(cfg *config.Config) error {
 	defer os.Remove(tempFile) // Ensure cleanup
 
 	if err := encryption.DecryptFileWithIdentities(backupFile, tempFile, []string{string(identityContent)}); err != nil {
-		fmt.Println("\n❌ Verification FAILED: Unable to decrypt backup")
+		logrus.Error("❌ Verification FAILED: Unable to decrypt backup")
 		return fmt.Errorf("decryption failed: %w", err)
 	}
 
-	fmt.Println("\n✓ Decryption successful - identity key is correct")
+	logrus.Info("✓ Decryption successful - identity key is correct")
 
 	// If only checking encryption, we're done
 	if p.onlyEncryption {
@@ -121,7 +121,7 @@ func (p *VerifyPlugin) validateBackupContents(zipPath string, log *logrus.Entry)
 	// Open ZIP file
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
-		fmt.Println("\n❌ Verification FAILED: Invalid ZIP file")
+		logrus.Error("❌ Verification FAILED: Invalid ZIP file")
 		return fmt.Errorf("failed to open ZIP file: %w", err)
 	}
 	defer r.Close()
@@ -129,7 +129,7 @@ func (p *VerifyPlugin) validateBackupContents(zipPath string, log *logrus.Entry)
 	// Read metadata
 	metadata, err := readBackupMetadata(r)
 	if err != nil {
-		fmt.Println("\n⚠️  Warning: Could not read backup metadata")
+		logrus.Warn("⚠️  Warning: Could not read backup metadata")
 		log.Warnf("Failed to read metadata: %v", err)
 	}
 
@@ -137,25 +137,25 @@ func (p *VerifyPlugin) validateBackupContents(zipPath string, log *logrus.Entry)
 	itemCounts := countBackupItems(r)
 
 	// Print results
-	fmt.Println("\n✓ Backup contents validated successfully")
-	fmt.Println("\n=== Backup Information ===")
+	logrus.Info("✓ Backup contents validated successfully")
+	logrus.Info("=== Backup Information ===")
 
 	if metadata != nil {
-		fmt.Printf("Backup Type: %s\n", getBackupType(metadata))
+		logrus.Infof("Backup Type: %s", getBackupType(metadata))
 		if metadata.BackupTimestamp != "" {
-			fmt.Printf("Created: %s\n", metadata.BackupTimestamp)
+			logrus.Infof("Created: %s", metadata.BackupTimestamp)
 		}
 		if metadata.BackupToolVersion != "" {
-			fmt.Printf("Tool Version: %s\n", metadata.BackupToolVersion)
+			logrus.Infof("Tool Version: %s", metadata.BackupToolVersion)
 		}
-		fmt.Printf("Total Items: %d\n", metadata.ItemCount)
+		logrus.Infof("Total Items: %d", metadata.ItemCount)
 		if len(metadata.ContainedTypes) > 0 {
-			fmt.Printf("Data Types: %s\n", strings.Join(metadata.ContainedTypes, ", "))
+			logrus.Infof("Data Types: %s", strings.Join(metadata.ContainedTypes, ", "))
 		}
 	}
 
 	if len(itemCounts) > 0 {
-		fmt.Println("\n=== Item Counts ===")
+		logrus.Info("=== Item Counts ===")
 		// Sort keys for consistent output
 		types := make([]string, 0, len(itemCounts))
 		for t := range itemCounts {
@@ -165,11 +165,11 @@ func (p *VerifyPlugin) validateBackupContents(zipPath string, log *logrus.Entry)
 
 		for _, t := range types {
 			count := itemCounts[t]
-			fmt.Printf("%s: %d\n", strings.Title(t), count)
+			logrus.Infof("%s: %d", strings.Title(t), count)
 		}
 	}
 
-	fmt.Println()
+	logrus.Info("")
 	return nil
 }
 

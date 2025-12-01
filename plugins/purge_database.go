@@ -40,11 +40,11 @@ func (p *PurgeDatabasePlugin) Execute(cfg *config.Config) error {
 
 	if dryRun {
 		logrus.Info("Starting database purge (DRY RUN - showing what would be deleted)...")
-		fmt.Println("\n⚠️  DRY RUN MODE - No data will be deleted")
-		fmt.Println("Add --force flag to actually delete the data\n")
+		logrus.Warn("⚠️  DRY RUN MODE - No data will be deleted")
+		logrus.Info("Add --force flag to actually delete the data\n")
 	} else {
 		logrus.Warn("Starting database purge - THIS WILL DELETE ALL DATA!")
-		fmt.Println("\n⚠️  WARNING: FORCE MODE - Data will be permanently deleted!\n")
+		logrus.Warn("⚠️  WARNING: FORCE MODE - Data will be permanently deleted!\n")
 	}
 
 	// Check if PostgreSQL tools are available
@@ -81,11 +81,11 @@ func (p *PurgeDatabasePlugin) Execute(cfg *config.Config) error {
 	}
 
 	if dryRun {
-		fmt.Println("\n✓ Dry run completed - no changes were made")
-		fmt.Println("Run with --force flag to actually delete the data")
+		logrus.Info("✓ Dry run completed - no changes were made")
+		logrus.Info("Run with --force flag to actually delete the data")
 		logrus.Info("Dry run completed")
 	} else {
-		fmt.Println("\n✓ Database purged successfully")
+		logrus.Info("✓ Database purged successfully")
 		logrus.Info("Database purged successfully")
 	}
 

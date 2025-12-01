@@ -90,6 +90,10 @@ tasks:
       - age-keygen -o {{.AGE_IDENTITY_FILE}}
       - age-keygen -y {{.AGE_IDENTITY_FILE}} > {{.AGE_RECIPIENT_FILE}}
 
+  statistics:
+    desc: Gathers and displays statistics about the current backup
+    cmd: go run cmd/owuicli/main.go statistics
+
   full-backup:
     desc: Runs backup-all without encryption
     silent: true

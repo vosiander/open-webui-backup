@@ -526,6 +526,166 @@ func (c *Client) GetAllChats() ([]Chat, error) {
 	return chats, nil
 }
 
+// GetChatsList fetches paginated list of chats from /api/v1/chats/list
+func (c *Client) GetChatsList(page int, includePinned, includeFolders bool) ([]ChatTitleID, error) {
+	path := fmt.Sprintf("/api/v1/chats/list?page=%d&include_pinned=%t&include_folders=%t",
+		page, includePinned, includeFolders)
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var chats []ChatTitleID
+	if err := json.NewDecoder(resp.Body).Decode(&chats); err != nil {
+		return nil, fmt.Errorf("failed to decode chats list response: %w", err)
+	}
+
+	return chats, nil
+}
+
+// GetAllChatsDB fetches all chats from database /api/v1/chats/all/db
+func (c *Client) GetAllChatsDB() ([]Chat, error) {
+	resp, err := c.doRequest("GET", "/api/v1/chats/all/db", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var chats []Chat
+	if err := json.NewDecoder(resp.Body).Decode(&chats); err != nil {
+		return nil, fmt.Errorf("failed to decode chats db response: %w", err)
+	}
+
+	return chats, nil
+}
+
+// SearchChats searches chats by text query
+func (c *Client) SearchChats(query string, page int) ([]ChatTitleID, error) {
+	path := fmt.Sprintf("/api/v1/chats/search?text=%s&page=%d", query, page)
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var chats []ChatTitleID
+	if err := json.NewDecoder(resp.Body).Decode(&chats); err != nil {
+		return nil, fmt.Errorf("failed to decode search results: %w", err)
+	}
+
+	return chats, nil
+}
+
+// GetChatsByFolder fetches chats in a specific folder
+func (c *Client) GetChatsByFolder(folderID string, page int) ([]Chat, error) {
+	path := fmt.Sprintf("/api/v1/chats/folder/%s/list?page=%d", folderID, page)
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var chats []Chat
+	if err := json.NewDecoder(resp.Body).Decode(&chats); err != nil {
+		return nil, fmt.Errorf("failed to decode folder chats: %w", err)
+	}
+
+	return chats, nil
+}
+
+// GetArchivedChats fetches archived chats
+func (c *Client) GetArchivedChats(page int, query, orderBy, direction string) ([]ChatTitleID, error) {
+	path := fmt.Sprintf("/api/v1/chats/archived?page=%d", page)
+	if query != "" {
+		path += fmt.Sprintf("&query=%s", query)
+	}
+	if orderBy != "" {
+		path += fmt.Sprintf("&order_by=%s", orderBy)
+	}
+	if direction != "" {
+		path += fmt.Sprintf("&direction=%s", direction)
+	}
+
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var chats []ChatTitleID
+	if err := json.NewDecoder(resp.Body).Decode(&chats); err != nil {
+		return nil, fmt.Errorf("failed to decode archived chats: %w", err)
+	}
+
+	return chats, nil
+}
+
+// GetSharedChat fetches a shared chat by share ID
+func (c *Client) GetSharedChat(shareID string) (*Chat, error) {
+	path := fmt.Sprintf("/api/v1/chats/share/%s", shareID)
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	var chat Chat
+	if err := json.NewDecoder(resp.Body).Decode(&chat); err != nil {
+		return nil, fmt.Errorf("failed to decode shared chat: %w", err)
+	}
+
+	return &chat, nil
+}
+
 // GetChatByID fetches a specific chat by ID
 func (c *Client) GetChatByID(id string) (*Chat, error) {
 	path := fmt.Sprintf("/api/v1/chats/%s", id)

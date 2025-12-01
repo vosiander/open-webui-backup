@@ -22,6 +22,12 @@ type FlaggablePlugin interface {
 	SetupFlags(cmd *cobra.Command)
 }
 
+// ConfigurablePlugin is an optional interface for plugins that need access to config in subcommands
+type ConfigurablePlugin interface {
+	// SetConfig allows plugins to store config for use in subcommands
+	SetConfig(cfg *config.Config)
+}
+
 // Registry holds all registered plugins
 type Registry struct {
 	plugins []Plugin
@@ -52,6 +58,11 @@ func CreateCommand(p Plugin, cfg *config.Config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return p.Execute(cfg)
 		},
+	}
+
+	// If the plugin implements ConfigurablePlugin, inject config before SetupFlags
+	if cp, ok := p.(ConfigurablePlugin); ok {
+		cp.SetConfig(cfg)
 	}
 
 	// If the plugin implements FlaggablePlugin, let it add custom flags

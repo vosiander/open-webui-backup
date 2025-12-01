@@ -202,6 +202,15 @@ type Chat struct {
 	UpdatedAt int64                  `json:"updated_at"`
 }
 
+// ChatTitleID represents a simplified chat response from list/search endpoints
+type ChatTitleID struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	UserID    string `json:"user_id"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
+}
+
 // ChatMessages represents the messages array in a chat
 type ChatMessages struct {
 	Messages []Message `json:"messages"`

@@ -94,6 +94,11 @@ tasks:
     desc: Gathers and displays statistics about the current backup
     cmd: go run cmd/owuicli/main.go statistics
 
+  cli:
+    desc: Run owuicli with arguments
+    silent: true
+    cmd: go run cmd/owuicli/main.go {{.CLI_ARGS}}
+
   full-backup:
     desc: Runs backup-all without encryption
     silent: true

@@ -15,8 +15,8 @@ Secure backup and restore tool for Open WebUI with mandatory age encryption.
 
 The project provides two separate commands:
 
-- **`owuicli`** - Command-line tool for backup/restore operations
-- **`owuiback`** - Web server for dashboard-based operations
+- **`owuicli`** - Command-line tool for backup/restore operations.
+- **`owuiback`** - Web server for dashboard-based operations.
 
 ```bash
 # Install CLI tool only (no web frontend required)

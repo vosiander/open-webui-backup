@@ -54,9 +54,13 @@ func (p *StatisticsPlugin) Execute(cfg *config.Config) error {
 	}
 	knowledgeBases, err := client.ListKnowledge()
 	if err != nil {
-		logrus.Warnf("Failed to fetch knowledge bases: %v", err)
+		logrus.Warnf("Failed to fetch knowledge bases: %v. Continuing with other statistics...", err)
+		stats.KnowledgeCount = 0
 	} else {
 		stats.KnowledgeCount = len(knowledgeBases)
+		if p.verbose && stats.KnowledgeCount > 0 {
+			logrus.Infof("Successfully counted %d knowledge bases", stats.KnowledgeCount)
+		}
 		// Calculate size of files in knowledge bases
 		for _, kb := range knowledgeBases {
 			if kb.Data != nil && kb.Data.FileIDs != nil {
@@ -74,15 +78,19 @@ func (p *StatisticsPlugin) Execute(cfg *config.Config) error {
 		}
 	}
 
-	// Models
+	// Models - prioritize count over perfect data quality
 	if p.verbose {
 		logrus.Info("Fetching models...")
 	}
 	models, err := client.ExportModels()
 	if err != nil {
-		logrus.Warnf("Failed to fetch models: %v", err)
+		logrus.Warnf("Failed to fetch models: %v. Continuing with other statistics...", err)
+		stats.ModelsCount = 0
 	} else {
 		stats.ModelsCount = len(models)
+		if p.verbose && stats.ModelsCount > 0 {
+			logrus.Infof("Successfully counted %d models", stats.ModelsCount)
+		}
 	}
 
 	// Tools
@@ -91,9 +99,13 @@ func (p *StatisticsPlugin) Execute(cfg *config.Config) error {
 	}
 	tools, err := client.ExportTools()
 	if err != nil {
-		logrus.Warnf("Failed to fetch tools: %v", err)
+		logrus.Warnf("Failed to fetch tools: %v. Continuing with other statistics...", err)
+		stats.ToolsCount = 0
 	} else {
 		stats.ToolsCount = len(tools)
+		if p.verbose && stats.ToolsCount > 0 {
+			logrus.Infof("Successfully counted %d tools", stats.ToolsCount)
+		}
 	}
 
 	// Prompts
@@ -102,9 +114,13 @@ func (p *StatisticsPlugin) Execute(cfg *config.Config) error {
 	}
 	prompts, err := client.ListPrompts()
 	if err != nil {
-		logrus.Warnf("Failed to fetch prompts: %v", err)
+		logrus.Warnf("Failed to fetch prompts: %v. Continuing with other statistics...", err)
+		stats.PromptsCount = 0
 	} else {
 		stats.PromptsCount = len(prompts)
+		if p.verbose && stats.PromptsCount > 0 {
+			logrus.Infof("Successfully counted %d prompts", stats.PromptsCount)
+		}
 	}
 
 	// Files
@@ -113,9 +129,13 @@ func (p *StatisticsPlugin) Execute(cfg *config.Config) error {
 	}
 	files, err := client.ListFiles()
 	if err != nil {
-		logrus.Warnf("Failed to fetch files: %v", err)
+		logrus.Warnf("Failed to fetch files: %v. Continuing with other statistics...", err)
+		stats.FilesCount = 0
 	} else {
 		stats.FilesCount = len(files)
+		if p.verbose && stats.FilesCount > 0 {
+			logrus.Infof("Successfully counted %d files", stats.FilesCount)
+		}
 		for _, file := range files {
 			stats.FilesSize += file.Meta.Size
 		}
@@ -127,9 +147,13 @@ func (p *StatisticsPlugin) Execute(cfg *config.Config) error {
 	}
 	chats, err := client.GetAllChats()
 	if err != nil {
-		logrus.Warnf("Failed to fetch chats: %v", err)
+		logrus.Warnf("Failed to fetch chats: %v. Continuing with other statistics...", err)
+		stats.ChatsCount = 0
 	} else {
 		stats.ChatsCount = len(chats)
+		if p.verbose && stats.ChatsCount > 0 {
+			logrus.Infof("Successfully counted %d chats", stats.ChatsCount)
+		}
 	}
 
 	// Groups
@@ -138,9 +162,13 @@ func (p *StatisticsPlugin) Execute(cfg *config.Config) error {
 	}
 	groups, err := client.GetAllGroups()
 	if err != nil {
-		logrus.Warnf("Failed to fetch groups: %v", err)
+		logrus.Warnf("Failed to fetch groups: %v. Continuing with other statistics...", err)
+		stats.GroupsCount = 0
 	} else {
 		stats.GroupsCount = len(groups)
+		if p.verbose && stats.GroupsCount > 0 {
+			logrus.Infof("Successfully counted %d groups", stats.GroupsCount)
+		}
 	}
 
 	// Feedbacks
@@ -149,9 +177,13 @@ func (p *StatisticsPlugin) Execute(cfg *config.Config) error {
 	}
 	feedbacks, err := client.GetAllFeedbacks()
 	if err != nil {
-		logrus.Warnf("Failed to fetch feedbacks: %v", err)
+		logrus.Warnf("Failed to fetch feedbacks: %v. Continuing with other statistics...", err)
+		stats.FeedbacksCount = 0
 	} else {
 		stats.FeedbacksCount = len(feedbacks)
+		if p.verbose && stats.FeedbacksCount > 0 {
+			logrus.Infof("Successfully counted %d feedbacks", stats.FeedbacksCount)
+		}
 	}
 
 	// Users
@@ -160,9 +192,13 @@ func (p *StatisticsPlugin) Execute(cfg *config.Config) error {
 	}
 	users, err := client.GetAllUsers()
 	if err != nil {
-		logrus.Warnf("Failed to fetch users: %v", err)
+		logrus.Warnf("Failed to fetch users: %v. Continuing with other statistics...", err)
+		stats.UsersCount = 0
 	} else {
 		stats.UsersCount = len(users)
+		if p.verbose && stats.UsersCount > 0 {
+			logrus.Infof("Successfully counted %d users", stats.UsersCount)
+		}
 	}
 
 	// Database

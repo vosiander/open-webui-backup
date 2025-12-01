@@ -112,7 +112,7 @@ type ModelMeta struct {
 	Description     *string                  `json:"description,omitempty"`
 	Capabilities    map[string]interface{}   `json:"capabilities,omitempty"`
 	Knowledge       []map[string]interface{} `json:"knowledge,omitempty"` // Can be files or collections
-	Tags            []string                 `json:"tags,omitempty"`
+	Tags            interface{}              `json:"tags,omitempty"`      // Flexible type to handle API changes
 }
 
 // KnowledgeItem represents a single knowledge item (file or collection)

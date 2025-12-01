@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -39,6 +42,10 @@ type ChatsPlugin struct {
 
 	// Shared flags
 	shareID string
+
+	// Live flags
+	timeframe string
+	interval  string
 }
 
 func NewChatsPlugin() *ChatsPlugin {
@@ -192,8 +199,24 @@ func (p *ChatsPlugin) SetupFlags(cmd *cobra.Command) {
 		},
 	}
 
+	// Live subcommand
+	liveCmd := &cobra.Command{
+		Use:   "live",
+		Short: "Monitor recent chats in real-time",
+		Long:  "Continuously display chats updated within a specified timeframe, refreshing at regular intervals",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if p.config.OpenWebUIAPIKey == "" {
+				return fmt.Errorf("OPEN_WEBUI_API_KEY environment variable is required")
+			}
+			client := openwebui.NewClient(p.config.OpenWebUIURL, p.config.OpenWebUIAPIKey)
+			return p.executeLive(client)
+		},
+	}
+	liveCmd.Flags().StringVar(&p.timeframe, "timeframe", "5m", "Show chats updated in last duration (e.g., 5m, 1h, 30s)")
+	liveCmd.Flags().StringVar(&p.interval, "interval", "15s", "Refresh interval (e.g., 15s, 30s, 1m)")
+
 	// Add subcommands to main command
-	cmd.AddCommand(listCmd, allCmd, allDbCmd, getCmd, searchCmd, folderCmd, archivedCmd, sharedCmd)
+	cmd.AddCommand(listCmd, allCmd, allDbCmd, getCmd, searchCmd, folderCmd, archivedCmd, sharedCmd, liveCmd)
 }
 
 func (p *ChatsPlugin) Execute(cfg *config.Config) error {
@@ -587,4 +610,175 @@ func truncate(s string, maxLen int) string {
 		return s[:maxLen]
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// executeLive continuously monitors and displays recent chats
+func (p *ChatsPlugin) executeLive(client *openwebui.Client) error {
+	// Parse timeframe duration
+	timeframeDuration, err := time.ParseDuration(p.timeframe)
+	if err != nil {
+		return fmt.Errorf("invalid timeframe '%s': %w", p.timeframe, err)
+	}
+
+	// Parse interval duration
+	intervalDuration, err := time.ParseDuration(p.interval)
+	if err != nil {
+		return fmt.Errorf("invalid interval '%s': %w", p.interval, err)
+	}
+
+	// Setup signal handler for graceful exit
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Get user lookup map once
+	userMap, err := p.getUserLookup(client)
+	if err != nil {
+		logrus.Warnf("Failed to fetch users: %v. Displaying without user names.", err)
+		userMap = make(map[string]string)
+	}
+
+	// Create a done channel to coordinate shutdown
+	done := make(chan bool)
+
+	// Start the refresh loop in a goroutine
+	go func() {
+		// Immediate first fetch
+		p.fetchAndDisplayLive(client, timeframeDuration, userMap)
+
+		ticker := time.NewTicker(intervalDuration)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				p.fetchAndDisplayLive(client, timeframeDuration, userMap)
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	// Wait for interrupt signal
+	<-sigChan
+	close(done)
+
+	return nil
+}
+
+// fetchAndDisplayLive fetches and displays chats updated within the timeframe
+func (p *ChatsPlugin) fetchAndDisplayLive(client *openwebui.Client, timeframe time.Duration, userMap map[string]string) {
+	// Calculate cutoff time
+	cutoffTime := time.Now().Add(-timeframe)
+	cutoffUnix := cutoffTime.Unix()
+
+	// Fetch all chats
+	allChats, err := client.GetAllChatsDB()
+	if err != nil {
+		logrus.Errorf("Failed to fetch chats: %v", err)
+		return
+	}
+
+	// Filter chats by timeframe
+	var recentChats []openwebui.Chat
+	for _, chat := range allChats {
+		if chat.UpdatedAt >= cutoffUnix {
+			recentChats = append(recentChats, chat)
+		}
+	}
+
+	// Sort by UpdatedAt descending (most recent first)
+	// Simple bubble sort since we expect small numbers
+	for i := 0; i < len(recentChats)-1; i++ {
+		for j := i + 1; j < len(recentChats); j++ {
+			if recentChats[i].UpdatedAt < recentChats[j].UpdatedAt {
+				recentChats[i], recentChats[j] = recentChats[j], recentChats[i]
+			}
+		}
+	}
+
+	// Clear screen
+	clearScreen()
+
+	// Display header
+	now := time.Now()
+	fmt.Println("=== Live Chat Monitor ===")
+	fmt.Printf("Showing chats updated in last %s | Refreshing every %s\n", p.timeframe, p.interval)
+	fmt.Printf("Last updated: %s\n\n", now.Format("2006-01-02 15:04:05"))
+
+	// Display table
+	if len(recentChats) == 0 {
+		fmt.Println("No chats found in the specified timeframe")
+	} else {
+		var buf bytes.Buffer
+		w := tabwriter.NewWriter(&buf, 0, 0, 3, ' ', 0)
+
+		// Header
+		fmt.Fprintln(w, "ID\tTitle\tUser Name\tUpdated")
+		fmt.Fprintln(w, "--------\t------------------------------------\t------------------\t----------")
+
+		// Data rows
+		for _, chat := range recentChats {
+			userName := userMap[chat.UserID]
+			if userName == "" {
+				userName = "-"
+			}
+
+			relativeTime := formatRelativeTime(chat.UpdatedAt)
+
+			// Truncate ID to first 8 characters for display
+			displayID := chat.ID
+			if len(displayID) > 8 {
+				displayID = displayID[:8]
+			}
+
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+				displayID,
+				truncate(chat.Title, 35),
+				truncate(userName, 18),
+				relativeTime,
+			)
+		}
+
+		w.Flush()
+		fmt.Print(buf.String())
+		fmt.Printf("\nTotal: %d chats\n", len(recentChats))
+	}
+}
+
+// clearScreen clears the terminal screen
+func clearScreen() {
+	fmt.Print("\033[2J\033[H")
+}
+
+// formatRelativeTime formats a Unix timestamp as relative time (e.g., "2m ago", "1h ago")
+func formatRelativeTime(ts int64) string {
+	if ts == 0 {
+		return "-"
+	}
+
+	now := time.Now()
+	t := time.Unix(ts, 0)
+	duration := now.Sub(t)
+
+	if duration < 0 {
+		return "just now"
+	}
+
+	seconds := int(duration.Seconds())
+	minutes := seconds / 60
+	hours := minutes / 60
+	days := hours / 24
+
+	if seconds < 60 {
+		if seconds < 10 {
+			return "just now"
+		}
+		return fmt.Sprintf("%ds ago", seconds)
+	} else if minutes < 60 {
+		return fmt.Sprintf("%dm ago", minutes)
+	} else if hours < 24 {
+		return fmt.Sprintf("%dh ago", hours)
+	} else {
+		return fmt.Sprintf("%dd ago", days)
+	}
 }

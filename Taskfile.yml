@@ -25,11 +25,11 @@ tasks:
 
   backup:
     desc: Runs backup-all with encryption. Make sure to create an identity first
-    cmd: go run cmd/owuiback/main.go backup --out {{.CURRENT_DIR}}/backups/backup.zip --encrypt-recipient $(cat {{.AGE_RECIPIENT_FILE}})
+    cmd: go run cmd/owuicli/main.go backup --out {{.CURRENT_DIR}}/backups/backup.zip --encrypt-recipient $(cat {{.AGE_RECIPIENT_FILE}})
 
   restore:
     desc: Restores an encrypted backup file
-    cmd: go run cmd/owuiback/main.go restore --file {{.CURRENT_DIR}}/backups/backup.zip.age --overwrite --decrypt-identity {{.AGE_IDENTITY_FILE}}
+    cmd: go run cmd/owuicli/main.go restore --file {{.CURRENT_DIR}}/backups/backup.zip.age --overwrite --decrypt-identity {{.AGE_IDENTITY_FILE}}
 
   decrypt:
     desc: Uses age to decrypt a file
@@ -95,16 +95,16 @@ tasks:
     silent: true
     cmds:
       - mkdir -p {{.FULL_BACKUP_PATH}}
-      - go run cmd/owuiback/main.go full-backup --path {{.FULL_BACKUP_PATH}}
-      - go run cmd/owuiback/main.go verify --path {{.FULL_BACKUP_PATH}}
+      - go run cmd/owuicli/main.go full-backup --path {{.FULL_BACKUP_PATH}}
+      - go run cmd/owuicli/main.go verify --path {{.FULL_BACKUP_PATH}}
 
   full-backup-decrypt:
     desc: Decrypts all .age files in the full backup directory
     silent: true
     cmds:
       - mkdir -p {{.FULL_BACKUP_PATH}}
-      - go run cmd/owuiback/main.go verify --path {{.FULL_BACKUP_PATH}}
-      - go run cmd/owuiback/main.go decrypt --path {{.FULL_BACKUP_PATH}}
+      - go run cmd/owuicli/main.go verify --path {{.FULL_BACKUP_PATH}}
+      - go run cmd/owuicli/main.go decrypt --path {{.FULL_BACKUP_PATH}}
 
   restore-database:
     desc: Restores only the database from a full backup
@@ -114,8 +114,8 @@ tasks:
         - ZIP_FILE_ENC
         - IDENTITY_FILE
     cmds:
-      - go run cmd/owuiback/main.go purge-database --force
-      - go run cmd/owuiback/main.go restore-database --file {{.ZIP_FILE_ENC}} --decrypt-identity {{.IDENTITY_FILE}}
+      - go run cmd/owuicli/main.go purge-database --force
+      - go run cmd/owuicli/main.go restore-database --file {{.ZIP_FILE_ENC}} --decrypt-identity {{.IDENTITY_FILE}}
 
   docker-build:
     desc: Build the Docker image
@@ -132,12 +132,12 @@ tasks:
     cmds:
       - task: frontend-build
       - mkdir -p dist
-      - GOOS=linux GOARCH=amd64 go build -o dist/owuiback-linux-amd64 cmd/owuiback/main.go
-      - GOOS=linux GOARCH=arm64 go build -o dist/owuiback-linux-arm64 cmd/owuiback/main.go
-      - GOOS=darwin GOARCH=amd64 go build -o dist/owuiback-darwin-amd64 cmd/owuiback/main.go
-      - GOOS=darwin GOARCH=arm64 go build -o dist/owuiback-darwin-arm64 cmd/owuiback/main.go
-      - GOOS=windows GOARCH=amd64 go build -o dist/owuiback-windows-amd64.exe cmd/owuiback/main.go
-      - GOOS=windows GOARCH=arm64 go build -o dist/owuiback-windows-arm64.exe cmd/owuiback/main.go
+      - GOOS=linux GOARCH=amd64 go build -o dist/owuicli-linux-amd64 cmd/owuicli/main.go
+      - GOOS=linux GOARCH=arm64 go build -o dist/owuicli-linux-arm64 cmd/owuicli/main.go
+      - GOOS=darwin GOARCH=amd64 go build -o dist/owuicli-darwin-amd64 cmd/owuicli/main.go
+      - GOOS=darwin GOARCH=arm64 go build -o dist/owuicli-darwin-arm64 cmd/owuicli/main.go
+      - GOOS=windows GOARCH=amd64 go build -o dist/owuicli-windows-amd64.exe cmd/owuicli/main.go
+      - GOOS=windows GOARCH=arm64 go build -o dist/owuicli-windows-arm64.exe cmd/owuicli/main.go
 
   serve:
     desc: Build and run the web server with embedded frontend (with fresh build)

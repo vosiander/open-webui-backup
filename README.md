@@ -13,11 +13,23 @@ Secure backup and restore tool for Open WebUI with mandatory age encryption.
 
 ## Installation
 
+The project provides two separate commands:
+
+- **`owuicli`** - Command-line tool for backup/restore operations
+- **`owuiback`** - Web server for dashboard-based operations
+
 ```bash
-# Build from source
+# Install CLI tool only (no web frontend required)
+go install github.com/vosiander/open-webui-backup/cmd/owuicli@latest
+
+# Install web server (includes web frontend)
+go install github.com/vosiander/open-webui-backup/cmd/owuiback@latest
+
+# Or build from source
+go build -o owuicli ./cmd/owuicli
 go build -o owuiback ./cmd/owuiback
 
-# Or use Task
+# Or use Task (builds both)
 task build
 ```
 
@@ -33,13 +45,13 @@ export OPEN_WEBUI_URL="https://your-instance.com"
 export OPEN_WEBUI_API_KEY="sk-your-api-key"
 
 # 2. Create backup (generates keys automatically)
-./owuiback full-backup --path ./backups
+owuicli full-backup --path ./backups
 
 # 3. Verify backup
-./owuiback verify --path ./backups
+owuicli verify --path ./backups
 
 # 4. Restore backup (when needed)
-./owuiback restore --file ./backups/backup-*.zip.age \
+owuicli restore --file ./backups/backup-*.zip.age \
     --decrypt-identity ./backups/identity.txt
 ```
 
@@ -47,7 +59,7 @@ export OPEN_WEBUI_API_KEY="sk-your-api-key"
 
 ```bash
 # 1. Generate Age Keys (One-Time)
-./owuiback new-identity --path ./my-keys
+owuicli new-identity --path ./my-keys
 # Or use age-keygen:
 # age-keygen -o ~/.age/identity.txt
 # age-keygen -y ~/.age/identity.txt > ~/.age/recipient.txt
@@ -59,25 +71,29 @@ export OWUI_ENCRYPTED_RECIPIENT=$(cat ./my-keys/recipient.txt)
 export OWUI_DECRYPT_IDENTITY="./my-keys/identity.txt"
 
 # 3. Create backup
-./owuiback backup --out ./backups/full.zip
+owuicli backup --out ./backups/full.zip
 
 # 4. Restore backup
-./owuiback restore --file ./backups/full.zip.age
+owuicli restore --file ./backups/full.zip.age
 
-# 5. Web interface
-./owuiback serve
+# 5. Web interface (separate command)
+owuiback serve
 # Open http://localhost:8080
 ```
 
 ## Commands
 
-### new-identity
+### CLI Commands (owuicli)
+
+All backup, restore, and management operations are available through the `owuicli` command:
+
+#### new-identity
 
 Generate a new age identity keypair and save to files.
 
 ```bash
 # Generate new identity in specified directory
-./owuiback new-identity --path ./my-keys
+owuicli new-identity --path ./my-keys
 
 # Identity files created:
 # - identity.txt (private key, 600 permissions)
@@ -92,17 +108,17 @@ Generate a new age identity keypair and save to files.
 - Private key saved with restrictive 600 permissions
 - Prints example environment variable commands
 
-### full-backup
+#### full-backup
 
 Create a backup with automatic age encryption and identity management.
 
 ```bash
 # Full backup (generates keys if needed)
-./owuiback full-backup --path ./backups
+owuicli full-backup --path ./backups
 
 # Selective backup
-./owuiback full-backup --path ./backups --knowledge --models
-./owuiback full-backup --path ./backups --prompts --tools
+owuicli full-backup --path ./backups --knowledge --models
+owuicli full-backup --path ./backups --prompts --tools
 
 # All files in same directory:
 # - identity.txt (created if missing)
@@ -121,19 +137,19 @@ Create a backup with automatic age encryption and identity management.
 - Automatic encryption with generated keys
 - No need to manage recipients manually
 
-### verify
+#### verify
 
 Verify that a backup file can be decrypted and optionally validate its contents.
 
 ```bash
 # Verify newest backup in directory
-./owuiback verify --path ./backups
+owuicli verify --path ./backups
 
 # Verify specific backup file
-./owuiback verify --path ./backups --file backup-20240101-120000.zip.age
+owuicli verify --path ./backups --file backup-20240101-120000.zip.age
 
 # Only check decryption (skip content validation)
-./owuiback verify --path ./backups --only-encryption
+owuicli verify --path ./backups --only-encryption
 
 # Verify shows:
 # - Decryption success/failure
@@ -153,16 +169,16 @@ Verify that a backup file can be decrypted and optionally validate its contents.
 - Works with both encrypted and unencrypted backups
 - Temporary files automatically cleaned up
 
-### decrypt
+#### decrypt
 
 Decrypt all .age encrypted files in a directory using identity.txt.
 
 ```bash
 # Decrypt all .age files in directory
-./owuiback decrypt --path ./backups
+owuicli decrypt --path ./backups
 
 # Decrypt with force overwrite
-./owuiback decrypt --path ./backups --force
+owuicli decrypt --path ./backups --force
 
 # Output example:
 # Decrypting 3 file(s) from ./backups
@@ -193,20 +209,20 @@ Decrypt all .age encrypted files in a directory using identity.txt.
 - Preparing encrypted files for manual inspection
 - Decrypting files for use with other tools
 
-### backup
+#### backup
 
 Create an encrypted backup of Open WebUI data.
 
 ```bash
 # Full backup
-./owuiback backup --out ./backups/full.zip
+owuicli backup --out ./backups/full.zip
 
 # Selective backup
-./owuiback backup --out ./backups/kb.zip --knowledge
-./owuiback backup --out ./backups/pt.zip --prompts --tools
+owuicli backup --out ./backups/kb.zip --knowledge
+owuicli backup --out ./backups/pt.zip --prompts --tools
 
 # Team backup (multiple recipients)
-./owuiback backup --out ./backups/team.zip \
+owuicli backup --out ./backups/team.zip \
     --encrypt-recipient age1alice... \
     --encrypt-recipient age1bob...
 ```
@@ -216,19 +232,19 @@ Create an encrypted backup of Open WebUI data.
 - `--encrypt-recipient` - Age public key (required, repeatable)
 - `--prompts`, `--tools`, `--knowledge`, `--models`, `--files`, `--chats` - Selective types
 
-### restore
+#### restore
 
 Restore data from an encrypted backup.
 
 ```bash
 # Full restore
-./owuiback restore --file ./backups/full.zip.age
+owuicli restore --file ./backups/full.zip.age
 
 # Selective restore
-./owuiback restore --file ./backups/full.zip.age --knowledge --models
+owuicli restore --file ./backups/full.zip.age --knowledge --models
 
 # With overwrite
-./owuiback restore --file ./backups/full.zip.age --overwrite
+owuicli restore --file ./backups/full.zip.age --overwrite
 ```
 
 **Flags:**
@@ -237,50 +253,38 @@ Restore data from an encrypted backup.
 - `--overwrite` - Replace existing data (default: skip existing)
 - `--prompts`, `--tools`, `--knowledge`, `--models`, `--files`, `--chats` - Selective types
 
-### purge
+#### purge
 
 Safely delete data with dry-run and confirmation.
 
 ```bash
 # Dry-run (shows what would be deleted)
-./owuiback purge
-./owuiback purge --chats --files
+owuicli purge
+owuicli purge --chats --files
 
 # Force deletion (requires typing "yes")
-./owuiback purge --force
-./owuiback purge --chats --force
+owuicli purge --force
+owuicli purge --chats --force
 ```
 
 **Flags:**
 - `--force`, `-f` - Actually perform deletion (required for deletion)
 - `--chats`, `--files`, `--models`, `--knowledge`, `--prompts`, `--tools` - Selective types
 
-### serve
-
-Start the web interface for backup/restore operations.
-
-```bash
-# Start web server (default: http://localhost:8080)
-./owuiback serve
-
-# Custom port
-./owuiback serve --port 3000
-```
-
-### backup-database
+#### backup-database
 
 Create a standalone encrypted backup of the PostgreSQL database.
 
 ```bash
 # Backup database (requires POSTGRES_URL environment variable)
-./owuiback backup-database --out ./backups/db-backup.zip
+owuicli backup-database --out ./backups/db-backup.zip
 
 # With specific PostgreSQL URL
-./owuiback backup-database --out ./backups/db-backup.zip \
+owuicli backup-database --out ./backups/db-backup.zip \
     --postgres-url "postgresql://user:pass@host:5432/dbname"
 
 # With encryption recipient
-./owuiback backup-database --out ./backups/db-backup.zip \
+owuicli backup-database --out ./backups/db-backup.zip \
     --encrypt-recipient age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
 ```
 
@@ -304,22 +308,22 @@ Create a standalone encrypted backup of the PostgreSQL database.
 - Database backup is independent of API-based data backups
 - Can be integrated into full-backup with `--database` flag
 
-### restore-database
+#### restore-database
 
 Restore PostgreSQL database from an encrypted backup.
 
 ```bash
 # Restore database
-./owuiback restore-database --file ./backups/db-backup.zip.age \
+owuicli restore-database --file ./backups/db-backup.zip.age \
     --decrypt-identity ./my-keys/identity.txt
 
 # With clean restore (drops existing objects first)
-./owuiback restore-database --file ./backups/db-backup.zip.age \
+owuicli restore-database --file ./backups/db-backup.zip.age \
     --decrypt-identity ./my-keys/identity.txt \
     --clean
 
 # Create database if it doesn't exist
-./owuiback restore-database --file ./backups/db-backup.zip.age \
+owuicli restore-database --file ./backups/db-backup.zip.age \
     --decrypt-identity ./my-keys/identity.txt \
     --create-db
 ```
@@ -341,19 +345,19 @@ Restore PostgreSQL database from an encrypted backup.
 - Use `--clean` flag carefully as it drops existing objects
 - Database restore does NOT restore API-based data (chats, knowledge bases, etc.)
 
-### purge-database
+#### purge-database
 
 Show what would be deleted or actually delete all data from the PostgreSQL database.
 
 ```bash
 # Dry-run (shows what would be deleted) - DEFAULT BEHAVIOR
-./owuiback purge-database
+owuicli purge-database
 
 # Actual purge (permanently deletes all data)
-./owuiback purge-database --force
+owuicli purge-database --force
 
 # With specific PostgreSQL URL
-./owuiback purge-database --postgres-url "postgresql://user:pass@host:5432/dbname" --force
+owuicli purge-database --postgres-url "postgresql://user:pass@host:5432/dbname" --force
 ```
 
 **Flags:**
@@ -383,14 +387,14 @@ The `full-backup` and `backup` commands support optional database backup integra
 ```bash
 # Database backup is AUTO-ENABLED when POSTGRES_URL is set
 export POSTGRES_URL="postgresql://user:pass@host:5432/dbname"
-./owuiback full-backup --path ./backups
+owuicli full-backup --path ./backups
 # ✓ POSTGRES_URL detected, including database backup automatically
 
 # Explicitly enable (when POSTGRES_URL is not in environment)
-./owuiback full-backup --path ./backups --database
+owuicli full-backup --path ./backups --database
 
 # Works with selective backups too
-./owuiback backup --out ./backups/data.zip --knowledge --models
+owuicli backup --out ./backups/data.zip --knowledge --models
 # ✓ POSTGRES_URL detected, including database backup automatically
 ```
 
@@ -421,16 +425,16 @@ export OPEN_WEBUI_URL="https://your-instance.com"
 export OPEN_WEBUI_API_KEY="sk-your-key"
 
 # 2. Create full backup (database included automatically)
-./owuiback full-backup --path ./backups
+owuicli full-backup --path ./backups
 # Output: ✓ POSTGRES_URL detected, including database backup automatically
 #         ✓ Database backup included
 
 # 3. Restore API data
-./owuiback restore --file ./backups/backup-*.zip.age \
+owuicli restore --file ./backups/backup-*.zip.age \
     --decrypt-identity ./backups/identity.txt
 
 # 4. Restore database separately
-./owuiback restore-database --file ./backups/backup-*.zip.age \
+owuicli restore-database --file ./backups/backup-*.zip.age \
     --decrypt-identity ./backups/identity.txt
 ```
 
@@ -478,12 +482,28 @@ age-keygen -o bob_identity.txt
 BOB_KEY=$(age-keygen -y bob_identity.txt)
 
 # Create backup for both
-./owuiback backup --out team.zip \
+owuicli backup --out team.zip \
     --encrypt-recipient $ALICE_KEY \
     --encrypt-recipient $BOB_KEY
 
 # Either can restore
-./owuiback restore --file team.zip.age --decrypt-identity alice_identity.txt
+owuicli restore --file team.zip.age --decrypt-identity alice_identity.txt
+```
+
+### Server Command (owuiback)
+
+The web server provides a dashboard interface for backup/restore operations:
+
+#### serve
+
+Start the web interface for backup/restore operations.
+
+```bash
+# Start web server (default: http://localhost:8080)
+owuiback serve
+
+# Custom port
+owuiback serve --port 3000
 ```
 
 ## Docker

@@ -30,14 +30,27 @@ func run() error {
 	// Create plugin registry
 	registry := plugin.NewRegistry()
 
-	// Register only the serve plugin for web dashboard
-	registry.Register(plugins.NewServePlugin())
+	// Register unified backup and restore plugins
+	registry.Register(plugins.NewBackupPlugin())
+	registry.Register(plugins.NewRestorePlugin())
+	registry.Register(plugins.NewPurgePlugin())
+
+	// Register age encryption and backup management plugins
+	registry.Register(plugins.NewNewIdentityPlugin())
+	registry.Register(plugins.NewVerifyPlugin())
+	registry.Register(plugins.NewFullBackupPlugin())
+	registry.Register(plugins.NewDecryptPlugin())
+
+	// Register database backup plugins
+	registry.Register(plugins.NewBackupDatabasePlugin())
+	registry.Register(plugins.NewPurgeDatabasePlugin())
+	registry.Register(plugins.NewRestoreDatabasePlugin())
 
 	// Create root command
 	rootCmd := &cobra.Command{
-		Use:   "owuiback",
-		Short: "Open WebUI Backup Server",
-		Long:  "Web dashboard server for backup and restore operations of Open WebUI application",
+		Use:   "owuicli",
+		Short: "Open WebUI Backup CLI Tool",
+		Long:  "Command-line tool to backup and restore various important information from an Open WebUI application",
 	}
 
 	// Register all plugin commands

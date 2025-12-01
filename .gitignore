@@ -239,3 +239,6 @@ go.work.sum
 # Frontend
 web/node_modules/
 web/dist/
+
+# Allow .gitkeep in pkg/web/dist to satisfy go:embed directive
+!pkg/web/dist/.gitkeep

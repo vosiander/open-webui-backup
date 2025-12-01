@@ -267,6 +267,173 @@ Start the web interface for backup/restore operations.
 ./owuiback serve --port 3000
 ```
 
+### backup-database
+
+Create a standalone encrypted backup of the PostgreSQL database.
+
+```bash
+# Backup database (requires POSTGRES_URL environment variable)
+./owuiback backup-database --out ./backups/db-backup.zip
+
+# With specific PostgreSQL URL
+./owuiback backup-database --out ./backups/db-backup.zip \
+    --postgres-url "postgresql://user:pass@host:5432/dbname"
+
+# With encryption recipient
+./owuiback backup-database --out ./backups/db-backup.zip \
+    --encrypt-recipient age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+```
+
+**Flags:**
+- `--out`, `-o` - Output file path (required)
+- `--postgres-url` - PostgreSQL connection URL (optional, uses POSTGRES_URL env var)
+- `--encrypt-recipient` - Age public key for encryption (optional, uses OWUI_ENCRYPTED_RECIPIENT env var)
+
+**Requirements:**
+- PostgreSQL client tools (`pg_dump`, `psql`) must be installed
+- Database connection must be accessible
+- POSTGRES_URL environment variable or --postgres-url flag
+
+**Output:**
+- Encrypted `.zip.age` file containing:
+  - `database/dump.sql` - Plain SQL dump
+  - `database/metadata.json` - Backup metadata (timestamp, version, etc.)
+
+**Notes:**
+- Uses `pg_dump` with `--no-owner --no-privileges` flags for portability
+- Database backup is independent of API-based data backups
+- Can be integrated into full-backup with `--database` flag
+
+### restore-database
+
+Restore PostgreSQL database from an encrypted backup.
+
+```bash
+# Restore database
+./owuiback restore-database --file ./backups/db-backup.zip.age \
+    --decrypt-identity ./my-keys/identity.txt
+
+# With clean restore (drops existing objects first)
+./owuiback restore-database --file ./backups/db-backup.zip.age \
+    --decrypt-identity ./my-keys/identity.txt \
+    --clean
+
+# Create database if it doesn't exist
+./owuiback restore-database --file ./backups/db-backup.zip.age \
+    --decrypt-identity ./my-keys/identity.txt \
+    --create-db
+```
+
+**Flags:**
+- `--file`, `-f` - Encrypted backup file (required)
+- `--decrypt-identity` - Path to age identity file (optional, uses OWUI_DECRYPTION_IDENTITY env var)
+- `--postgres-url` - PostgreSQL connection URL (optional, uses POSTGRES_URL env var)
+- `--clean` - Drop existing objects before restore (use with caution)
+- `--create-db` - Create database if it doesn't exist
+
+**Requirements:**
+- PostgreSQL client tools (`psql`) must be installed
+- Target database must be accessible
+- Valid decryption identity for the backup file
+
+**Notes:**
+- Restoration is mutually exclusive with API-based restoration
+- Use `--clean` flag carefully as it drops existing objects
+- Database restore does NOT restore API-based data (chats, knowledge bases, etc.)
+
+### purge-database
+
+Show what would be deleted or actually delete all data from the PostgreSQL database.
+
+```bash
+# Dry-run (shows what would be deleted) - DEFAULT BEHAVIOR
+./owuiback purge-database
+
+# Actual purge (permanently deletes all data)
+./owuiback purge-database --force
+
+# With specific PostgreSQL URL
+./owuiback purge-database --postgres-url "postgresql://user:pass@host:5432/dbname" --force
+```
+
+**Flags:**
+- `--force`, `-f` - Actually delete data (without this, only shows what would be deleted)
+- `--postgres-url` - PostgreSQL connection URL (optional, uses POSTGRES_URL env var)
+
+**Behavior:**
+- **Without `--force`**: Dry-run mode - shows all tables, sequences, and views that would be deleted
+- **With `--force`**: Permanently deletes all tables, sequences, and views in the database
+
+**Safety Features:**
+- Default is dry-run mode (safe to run without --force)
+- Lists all objects that will be affected
+- Connection test before any operations
+- Clear warnings displayed in force mode
+
+**Notes:**
+- **EXTREMELY DANGEROUS when used with --force** - irreversibly deletes all database data
+- Always run without --force first to see what will be deleted
+- Create a backup before purging (recommended)
+- Does not affect API-based data stored separately
+
+### Database Integration with Full Backups
+
+The `full-backup` and `backup` commands support optional database backup integration with **automatic detection**:
+
+```bash
+# Database backup is AUTO-ENABLED when POSTGRES_URL is set
+export POSTGRES_URL="postgresql://user:pass@host:5432/dbname"
+./owuiback full-backup --path ./backups
+# ✓ POSTGRES_URL detected, including database backup automatically
+
+# Explicitly enable (when POSTGRES_URL is not in environment)
+./owuiback full-backup --path ./backups --database
+
+# Works with selective backups too
+./owuiback backup --out ./backups/data.zip --knowledge --models
+# ✓ POSTGRES_URL detected, including database backup automatically
+```
+
+**Auto-Enable Behavior:**
+- Database backup is **automatically included** when `POSTGRES_URL` environment variable is detected
+- No need to use `--database` flag if `POSTGRES_URL` is set
+- You can still explicitly use `--database` flag if needed
+- Fails gracefully with warning if PostgreSQL tools are not available
+
+**Requirements:**
+- `POSTGRES_URL` environment variable (for auto-enable)
+- PostgreSQL client tools (`pg_dump`, `psql`) must be installed
+- Database must be accessible
+
+**Backup Structure:**
+- Database dump is added to the same ZIP file as API data
+- Database folder structure: `database/dump.sql` and `database/metadata.json`
+- Backup fails gracefully if database backup fails (with warning)
+
+**Restoration:**
+When restoring a full backup that includes database data, use the `restore-database` command separately. The `restore` command will detect and notify you if database backup is present but skip database restoration (API data and database must be restored separately).
+
+**Example Full Workflow:**
+```bash
+# 1. Set environment (database backup auto-enabled)
+export POSTGRES_URL="postgresql://user:pass@localhost:5432/openwebui"
+export OPEN_WEBUI_URL="https://your-instance.com"
+export OPEN_WEBUI_API_KEY="sk-your-key"
+
+# 2. Create full backup (database included automatically)
+./owuiback full-backup --path ./backups
+# Output: ✓ POSTGRES_URL detected, including database backup automatically
+#         ✓ Database backup included
+
+# 3. Restore API data
+./owuiback restore --file ./backups/backup-*.zip.age \
+    --decrypt-identity ./backups/identity.txt
+
+# 4. Restore database separately
+./owuiback restore-database --file ./backups/backup-*.zip.age \
+    --decrypt-identity ./backups/identity.txt
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -285,6 +452,14 @@ export OPEN_WEBUI_URL="https://openwebui.example.com"
 export OPEN_WEBUI_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxx"
 export OWUI_ENCRYPTED_RECIPIENT="age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
 export OWUI_DECRYPT_IDENTITY="$HOME/.age/identity.txt"
+
+# PostgreSQL database backup (optional)
+export POSTGRES_URL="postgresql://user:password@localhost:5432/dbname"
+
+# PostgreSQL binary paths (optional - for non-standard installations like Homebrew)
+export PSQL_BINARY="/opt/homebrew/opt/libpq/bin/psql"
+export PG_DUMP_BINARY="/opt/homebrew/opt/libpq/bin/pg_dump"
+export PG_RESTORE_BINARY="/opt/homebrew/opt/libpq/bin/pg_restore"
 ```
 
 ## Encryption

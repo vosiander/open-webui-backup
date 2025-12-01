@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1925,6 +1926,112 @@ func writeMetadataToZip(zipWriter *zip.Writer, metadata *openwebui.BackupMetadat
 
 	if _, err := metadataFile.Write(metadataJSON); err != nil {
 		return fmt.Errorf("failed to write owui.json: %w", err)
+	}
+
+	return nil
+}
+
+// AddDatabaseToZip adds database dump and metadata to an existing ZIP file
+func AddDatabaseToZip(zipPath string, dumpData []byte, databaseName string, postgresVersion string) error {
+	// Open the existing ZIP file for reading
+	zipReader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to open ZIP file: %w", err)
+	}
+	defer zipReader.Close()
+
+	// Create a temporary file for the new ZIP
+	tempZip := zipPath + ".new"
+	tempFile, err := os.Create(tempZip)
+	if err != nil {
+		zipReader.Close()
+		return fmt.Errorf("failed to create temporary ZIP file: %w", err)
+	}
+	defer func() {
+		tempFile.Close()
+		os.Remove(tempZip) // Clean up temp file on error
+	}()
+
+	zipWriter := zip.NewWriter(tempFile)
+
+	// Copy all existing files from the old ZIP to the new ZIP
+	for _, file := range zipReader.File {
+		if err := copyZipFile(zipWriter, file); err != nil {
+			zipWriter.Close()
+			return fmt.Errorf("failed to copy file %s: %w", file.Name, err)
+		}
+	}
+
+	// Add database dump to database/dump.sql
+	dumpFile, err := zipWriter.Create("database/dump.sql")
+	if err != nil {
+		zipWriter.Close()
+		return fmt.Errorf("failed to create dump.sql in zip: %w", err)
+	}
+	if _, err := dumpFile.Write(dumpData); err != nil {
+		zipWriter.Close()
+		return fmt.Errorf("failed to write dump.sql: %w", err)
+	}
+
+	// Add database metadata
+	metadata := map[string]interface{}{
+		"backup_timestamp": time.Now().UTC().Format(time.RFC3339),
+		"database_name":    databaseName,
+		"postgres_version": postgresVersion,
+		"dump_format":      "plain",
+		"compressed":       false,
+	}
+
+	metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		zipWriter.Close()
+		return fmt.Errorf("failed to marshal database metadata: %w", err)
+	}
+
+	metadataFile, err := zipWriter.Create("database/metadata.json")
+	if err != nil {
+		zipWriter.Close()
+		return fmt.Errorf("failed to create metadata.json in zip: %w", err)
+	}
+	if _, err := metadataFile.Write(metadataJSON); err != nil {
+		zipWriter.Close()
+		return fmt.Errorf("failed to write metadata.json: %w", err)
+	}
+
+	// Close the new ZIP
+	if err := zipWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close new ZIP: %w", err)
+	}
+	tempFile.Close()
+	zipReader.Close()
+
+	// Replace the old ZIP with the new one
+	if err := os.Rename(tempZip, zipPath); err != nil {
+		return fmt.Errorf("failed to replace old ZIP: %w", err)
+	}
+
+	logrus.Debug("Database backup added to ZIP successfully")
+	return nil
+}
+
+// copyZipFile copies a file from one ZIP archive to another
+func copyZipFile(zipWriter *zip.Writer, file *zip.File) error {
+	// Open the file in the source ZIP
+	reader, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	// Create the file in the destination ZIP
+	writer, err := zipWriter.Create(file.Name)
+	if err != nil {
+		return err
+	}
+
+	// Copy the content
+	if _, err := io.Copy(writer, reader); err != nil {
+		return err
 	}
 
 	return nil

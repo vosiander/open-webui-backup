@@ -42,6 +42,11 @@ func run() error {
 	registry.Register(plugins.NewFullBackupPlugin())
 	registry.Register(plugins.NewDecryptPlugin())
 
+	// Register database backup plugins
+	registry.Register(plugins.NewBackupDatabasePlugin())
+	registry.Register(plugins.NewPurgeDatabasePlugin())
+	registry.Register(plugins.NewRestoreDatabasePlugin())
+
 	// Create root command
 	rootCmd := &cobra.Command{
 		Use:   "owuiback",

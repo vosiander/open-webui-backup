@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/vosiander/open-webui-backup/pkg/backup"
 	"github.com/vosiander/open-webui-backup/pkg/config"
+	"github.com/vosiander/open-webui-backup/pkg/database"
 	"github.com/vosiander/open-webui-backup/pkg/encryption"
 	"github.com/vosiander/open-webui-backup/pkg/openwebui"
 )
@@ -18,6 +19,7 @@ import (
 // FullBackupPlugin creates a backup with automatic identity management
 type FullBackupPlugin struct {
 	path      string
+	database  bool
 	prompts   bool
 	tools     bool
 	knowledge bool
@@ -48,6 +50,7 @@ func (p *FullBackupPlugin) Description() string {
 func (p *FullBackupPlugin) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&p.path, "path", "", "Directory for identity files and backup output (required)")
 	cmd.MarkFlagRequired("path")
+	cmd.Flags().BoolVar(&p.database, "database", false, "Include database backup (requires POSTGRES_URL env variable)")
 	cmd.Flags().BoolVar(&p.prompts, "prompts", false, "Include only prompts in backup")
 	cmd.Flags().BoolVar(&p.tools, "tools", false, "Include only tools in backup")
 	cmd.Flags().BoolVar(&p.knowledge, "knowledge", false, "Include only knowledge bases in backup")
@@ -134,6 +137,23 @@ func (p *FullBackupPlugin) Execute(cfg *config.Config) error {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
 
+	// Auto-enable database backup if POSTGRES_URL is set and flag not explicitly set
+	includeDatabase := p.database
+	if !includeDatabase && database.IsPostgresURLSet() {
+		includeDatabase = true
+		log.Info("POSTGRES_URL detected, including database backup automatically")
+	}
+
+	// Conditionally add database backup to the ZIP
+	if includeDatabase {
+		if err := p.addDatabaseBackupToZip(tempFile, log); err != nil {
+			logrus.Warnf("Database backup skipped: %v", err)
+			fmt.Printf("\n⚠️  Database backup skipped: %v\n", err)
+		} else {
+			fmt.Println("✓ Database backup included")
+		}
+	}
+
 	// Encrypt the backup
 	log.Info("Encrypting backup...")
 	encryptOpts := &encryption.EncryptOptions{
@@ -209,4 +229,58 @@ func ensureIdentityFiles(dir string, log *logrus.Entry) (string, bool, error) {
 	log.Infof("Saved public key to: %s", recipientPath)
 
 	return publicKey, true, nil
+}
+
+// addDatabaseBackupToZip adds database backup to an existing ZIP file
+func (p *FullBackupPlugin) addDatabaseBackupToZip(zipPath string, log *logrus.Entry) error {
+	// Check if POSTGRES_URL is set
+	postgresURL := database.GetPostgresURLFromEnv()
+	if postgresURL == "" {
+		return fmt.Errorf("POSTGRES_URL environment variable not set")
+	}
+
+	// Check if PostgreSQL tools are available
+	if err := database.CheckToolsAvailable(); err != nil {
+		return fmt.Errorf("PostgreSQL tools not available: %w", err)
+	}
+
+	// Parse connection URL
+	dbConfig, err := database.ParsePostgresURL(postgresURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse POSTGRES_URL: %w", err)
+	}
+
+	log.Infof("Adding database backup for: %s", database.FormatConnectionInfo(dbConfig))
+
+	// Test connection
+	if err := database.TestConnection(dbConfig); err != nil {
+		return fmt.Errorf("database connection failed: %w", err)
+	}
+
+	// Create database dump
+	dumpOptions := &database.DumpOptions{
+		Format:       "plain",
+		NoOwner:      true,
+		NoPrivileges: true,
+	}
+
+	dumpData, err := database.CreateDump(dbConfig, dumpOptions)
+	if err != nil {
+		return fmt.Errorf("failed to create database dump: %w", err)
+	}
+
+	// Get PostgreSQL version for metadata
+	version, err := database.GetPostgresVersion(dbConfig)
+	if err != nil {
+		log.Warnf("Failed to get PostgreSQL version: %v", err)
+		version = "unknown"
+	}
+
+	// Add database dump and metadata to existing ZIP
+	if err := backup.AddDatabaseToZip(zipPath, dumpData, dbConfig.Database, version); err != nil {
+		return fmt.Errorf("failed to add database to ZIP: %w", err)
+	}
+
+	log.Infof("Database backup added successfully (%d bytes)", len(dumpData))
+	return nil
 }

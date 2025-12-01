@@ -133,3 +133,41 @@ func FindLatestBackup(dir, pattern string) (string, error) {
 	// Return the most recent file (last in sorted list)
 	return files[len(files)-1], nil
 }
+
+// GetDecryptIdentitiesFromEnvOrFlag gets decryption identities from flag or environment
+// Returns slice of identity strings (file contents)
+func GetDecryptIdentitiesFromEnvOrFlag(identityFiles []string) ([]string, error) {
+	var identities []string
+
+	// If identity files provided via flag, read them
+	if len(identityFiles) > 0 {
+		for _, identityFile := range identityFiles {
+			content, err := os.ReadFile(identityFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read identity file %s: %w", identityFile, err)
+			}
+			identities = append(identities, string(content))
+		}
+		return identities, nil
+	}
+
+	// Check environment variable
+	envIdentity := os.Getenv("OWUI_DECRYPTION_IDENTITY")
+	if envIdentity != "" {
+		// Check if it's a file path or direct identity content
+		if _, err := os.Stat(envIdentity); err == nil {
+			// It's a file path
+			content, err := os.ReadFile(envIdentity)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read identity file from OWUI_DECRYPTION_IDENTITY: %w", err)
+			}
+			identities = append(identities, string(content))
+		} else {
+			// Assume it's direct identity content
+			identities = append(identities, envIdentity)
+		}
+		return identities, nil
+	}
+
+	return nil, fmt.Errorf("no decryption identity provided (use --decrypt-identity flag or OWUI_DECRYPTION_IDENTITY environment variable)")
+}

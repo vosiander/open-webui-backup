@@ -106,6 +106,17 @@ tasks:
       - go run cmd/owuiback/main.go verify --path {{.FULL_BACKUP_PATH}}
       - go run cmd/owuiback/main.go decrypt --path {{.FULL_BACKUP_PATH}}
 
+  restore-database:
+    desc: Restores only the database from a full backup
+    silent: true
+    requires:
+      vars:
+        - ZIP_FILE_ENC
+        - IDENTITY_FILE
+    cmds:
+      - go run cmd/owuiback/main.go purge-database --force
+      - go run cmd/owuiback/main.go restore-database --file {{.ZIP_FILE_ENC}} --decrypt-identity {{.IDENTITY_FILE}}
+
   docker-build:
     desc: Build the Docker image
     cmd: docker build -t owuiback:latest .

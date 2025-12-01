@@ -1,8 +1,10 @@
 package plugins
 
 import (
+	"archive/zip"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -137,11 +139,45 @@ func (p *RestorePlugin) Execute(cfg *config.Config) error {
 		options.Feedbacks = true
 	}
 
+	// Check if backup contains database folder
+	hasDatabaseBackup, err := p.checkForDatabaseBackup(tempFile)
+	if err != nil {
+		logrus.Warnf("Failed to check for database backup: %v", err)
+	}
+
 	// Perform the restore (no progress callback for CLI)
 	if err := restore.RestoreSelective(client, tempFile, options, p.overwrite, nil); err != nil {
 		logrus.Fatalf("Failed to restore: %v", err)
 	}
 
 	logrus.Info("Restore completed successfully")
+
+	// Display database skip notification if database backup was detected
+	if hasDatabaseBackup {
+		logrus.Info("")
+		logrus.Info("═══════════════════════════════════════════════════════════════")
+		logrus.Info("Note: Database backup detected but not restored.")
+		logrus.Info("Use the 'restore-database' command to restore the database separately:")
+		logrus.Info("  owuiback restore-database --file " + p.file + " --decrypt-identity <identity-file>")
+		logrus.Info("═══════════════════════════════════════════════════════════════")
+	}
+
 	return nil
+}
+
+// checkForDatabaseBackup checks if the backup ZIP contains a database folder
+func (p *RestorePlugin) checkForDatabaseBackup(zipPath string) (bool, error) {
+	zipReader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return false, err
+	}
+	defer zipReader.Close()
+
+	for _, file := range zipReader.File {
+		if strings.HasPrefix(file.Name, "database/") {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

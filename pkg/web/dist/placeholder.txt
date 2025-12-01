@@ -1,0 +1,3 @@
+This file ensures the dist directory exists in the repository.
+The go:embed directive in pkg/web/embed.go requires at least one embeddable file.
+When building locally, this directory will be populated with the actual frontend build files.

@@ -706,7 +706,7 @@ func BackupChats(client *openwebui.Client, outputDir string) error {
 	}
 
 	logrus.Info("Fetching chats...")
-	chats, err := client.GetAllChats()
+	chats, err := client.GetAllChatsDB()
 	if err != nil {
 		return fmt.Errorf("failed to get chats: %w", err)
 	}
@@ -780,7 +780,7 @@ func backupSingleChat(chat *openwebui.Chat, client *openwebui.Client, outputDir 
 
 // backupAllChats backs up all chats into the unified ZIP
 func backupAllChats(zipWriter *zip.Writer, client *openwebui.Client) (int, error) {
-	chats, err := client.GetAllChats()
+	chats, err := client.GetAllChatsDB()
 	if err != nil {
 		return 0, fmt.Errorf("failed to get chats: %w", err)
 	}

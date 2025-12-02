@@ -19,6 +19,7 @@ type BackupDatabasePlugin struct {
 	postgresURL      string
 	out              string
 	encryptRecipient []string
+	verbose          bool
 }
 
 func NewBackupDatabasePlugin() *BackupDatabasePlugin {
@@ -40,6 +41,7 @@ func (p *BackupDatabasePlugin) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&p.out, "out", "o", "", "Output file path for the backup (required, .age extension will be appended)")
 	cmd.MarkFlagRequired("out")
 	cmd.Flags().StringSliceVar(&p.encryptRecipient, "encrypt-recipient", nil, "Encrypt backup with age public key(s) (or use OWUI_ENCRYPTED_RECIPIENT env variable)")
+	cmd.Flags().BoolVarP(&p.verbose, "verbose", "v", false, "Enable verbose output (show Docker commands and pg_dump output)")
 }
 
 // Execute runs the plugin with the given configuration
@@ -74,7 +76,7 @@ func (p *BackupDatabasePlugin) Execute(cfg *config.Config) error {
 		return fmt.Errorf("database connection test failed: %w", err)
 	}
 
-	// Get encryption recipients (required)
+	// Get encryption recipients (required) - supports both files and direct recipient strings
 	recipients, err := encryption.GetEncryptRecipientsFromEnvOrFlag(p.encryptRecipient)
 	if err != nil {
 		return fmt.Errorf("failed to get encryption recipients: %w", err)
@@ -122,6 +124,7 @@ func (p *BackupDatabasePlugin) createDatabaseBackupZip(outputPath string, dbConf
 		Format:       "plain",
 		NoOwner:      true,
 		NoPrivileges: true,
+		Verbose:      p.verbose,
 	}
 
 	dumpData, err := database.CreateDump(dbConfig, dumpOptions)

@@ -17,8 +17,9 @@ type RestoreDatabasePlugin struct {
 	postgresURL     string
 	file            string
 	decryptIdentity []string
-	clean           bool
+	purge           bool
 	createDB        bool
+	verbose         bool
 }
 
 func NewRestoreDatabasePlugin() *RestoreDatabasePlugin {
@@ -40,8 +41,9 @@ func (p *RestoreDatabasePlugin) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&p.file, "file", "f", "", "Encrypted backup file to restore from (required)")
 	cmd.MarkFlagRequired("file")
 	cmd.Flags().StringSliceVar(&p.decryptIdentity, "decrypt-identity", nil, "Age identity file(s) for decryption (or use OWUI_DECRYPTION_IDENTITY env variable)")
-	cmd.Flags().BoolVar(&p.clean, "clean", false, "Drop existing objects before restoring (use with caution)")
+	cmd.Flags().BoolVar(&p.purge, "purge", false, "Purge all database objects before restoring (drops all tables, sequences, and views)")
 	cmd.Flags().BoolVar(&p.createDB, "create-db", false, "Create database if it doesn't exist")
+	cmd.Flags().BoolVarP(&p.verbose, "verbose", "v", false, "Enable verbose output (show Docker commands and pg_restore/psql output)")
 }
 
 // Execute runs the plugin with the given configuration
@@ -101,12 +103,20 @@ func (p *RestoreDatabasePlugin) Execute(cfg *config.Config) error {
 		return fmt.Errorf("failed to extract database dump: %w", err)
 	}
 
+	// Purge database if requested
+	if p.purge {
+		logrus.Warn("Purging all database objects before restore...")
+		if err := database.PurgeDatabase(dbConfig, false); err != nil {
+			return fmt.Errorf("failed to purge database: %w", err)
+		}
+	}
+
 	// Restore the database
 	restoreOptions := &database.RestoreOptions{
-		Clean:        p.clean,
 		CreateDB:     p.createDB,
 		NoOwner:      true,
 		NoPrivileges: true,
+		Verbose:      p.verbose,
 	}
 
 	if err := database.RestoreDump(dbConfig, dumpData, restoreOptions); err != nil {

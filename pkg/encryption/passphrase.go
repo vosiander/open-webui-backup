@@ -111,42 +111,6 @@ const (
 	EnvDecryptIdentity  = "OWUI_DECRYPT_IDENTITY"
 )
 
-// GetEncryptRecipientsFromEnvOrFlag returns encryption recipients from flag or environment variable
-// Priority: flag values > environment variable
-// Returns error if no recipients are provided from either source
-func GetEncryptRecipientsFromEnvOrFlag(flagRecipients []string) ([]string, error) {
-	// If flag is provided, use it
-	if len(flagRecipients) > 0 {
-		return flagRecipients, nil
-	}
-
-	// Otherwise, try environment variable
-	recipientStr := os.Getenv(EnvEncryptRecipient)
-	if recipientStr == "" {
-		return nil, fmt.Errorf("no encryption recipients provided: use --encrypt-recipient flag or set %s environment variable", EnvEncryptRecipient)
-	}
-
-	// Support comma-separated recipients
-	recipients := strings.Split(recipientStr, ",")
-	for i := range recipients {
-		recipients[i] = strings.TrimSpace(recipients[i])
-	}
-
-	// Filter out empty strings
-	validRecipients := []string{}
-	for _, r := range recipients {
-		if r != "" {
-			validRecipients = append(validRecipients, r)
-		}
-	}
-
-	if len(validRecipients) == 0 {
-		return nil, fmt.Errorf("no valid encryption recipients found in %s environment variable", EnvEncryptRecipient)
-	}
-
-	return validRecipients, nil
-}
-
 // GetDecryptIdentityFilesFromEnvOrFlag returns decryption identity files from flag or environment variable
 // Priority: flag values > environment variable
 // Returns error if no identity files are provided from either source

@@ -71,7 +71,7 @@ func (p *BackupPlugin) Execute(cfg *config.Config) error {
 		logrus.Fatalf("output file is required (use --out flag)")
 	}
 
-	// Get encryption recipients (required)
+	// Get encryption recipients (required) - supports both files and direct recipient strings
 	recipients, err := encryption.GetEncryptRecipientsFromEnvOrFlag(p.encryptRecipient)
 	if err != nil {
 		logrus.Fatalf("Failed to get encryption recipients: %v", err)

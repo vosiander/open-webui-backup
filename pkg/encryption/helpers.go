@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -170,4 +171,120 @@ func GetDecryptIdentitiesFromEnvOrFlag(identityFiles []string) ([]string, error)
 	}
 
 	return nil, fmt.Errorf("no decryption identity provided (use --decrypt-identity flag or OWUI_DECRYPTION_IDENTITY environment variable)")
+}
+
+// GetEncryptRecipientsFromEnvOrFlag gets encryption recipients from flag or environment
+// Supports both file paths and direct recipient strings
+// Returns slice of recipient strings (file contents or direct values)
+func GetEncryptRecipientsFromEnvOrFlag(recipientInputs []string) ([]string, error) {
+	var recipients []string
+
+	// If recipients provided via flag, process them
+	if len(recipientInputs) > 0 {
+		for _, recipientInput := range recipientInputs {
+			// Check if it's a file path or direct recipient string
+			fileInfo, err := os.Stat(recipientInput)
+			if err == nil && !fileInfo.IsDir() {
+				// It's a file path - read the recipient from file
+				content, err := os.ReadFile(recipientInput)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read recipient file %s: %w", recipientInput, err)
+				}
+				recipients = append(recipients, strings.TrimSpace(string(content)))
+			} else if err != nil && os.IsNotExist(err) {
+				// File doesn't exist - check if it looks like a file path
+				if strings.Contains(recipientInput, "/") || strings.Contains(recipientInput, "\\") || strings.HasSuffix(recipientInput, ".txt") {
+					return nil, fmt.Errorf("recipient file not found: %s (use absolute path or ensure file exists)", recipientInput)
+				}
+				// Assume it's a direct recipient string
+				recipients = append(recipients, recipientInput)
+			} else if fileInfo != nil && fileInfo.IsDir() {
+				return nil, fmt.Errorf("recipient path is a directory, not a file: %s", recipientInput)
+			} else {
+				// Other error accessing file, but try as recipient string anyway
+				recipients = append(recipients, recipientInput)
+			}
+		}
+		return recipients, nil
+	}
+
+	// Check environment variable
+	envRecipient := os.Getenv("OWUI_ENCRYPTED_RECIPIENT")
+	if envRecipient != "" {
+		// Support comma-separated recipients
+		recipientList := splitAndTrim(envRecipient)
+
+		for _, recipientInput := range recipientList {
+			// Check if it's a file path or direct recipient string
+			if _, err := os.Stat(recipientInput); err == nil {
+				// It's a file path - read the recipient from file
+				content, err := os.ReadFile(recipientInput)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read recipient file %s from OWUI_ENCRYPTED_RECIPIENT: %w", recipientInput, err)
+				}
+				recipients = append(recipients, string(content))
+			} else {
+				// Assume it's a direct recipient string
+				recipients = append(recipients, recipientInput)
+			}
+		}
+
+		if len(recipients) > 0 {
+			return recipients, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no encryption recipients provided (use --encrypt-recipient flag or OWUI_ENCRYPTED_RECIPIENT environment variable)")
+}
+
+// splitAndTrim splits a comma-separated string and trims whitespace from each part
+func splitAndTrim(s string) []string {
+	parts := []string{}
+	for _, part := range splitString(s, ',') {
+		trimmed := trimSpace(part)
+		if trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+	}
+	return parts
+}
+
+// splitString splits a string by a delimiter
+func splitString(s string, delim rune) []string {
+	var parts []string
+	var current []rune
+
+	for _, r := range s {
+		if r == delim {
+			parts = append(parts, string(current))
+			current = []rune{}
+		} else {
+			current = append(current, r)
+		}
+	}
+	parts = append(parts, string(current))
+	return parts
+}
+
+// trimSpace removes leading and trailing whitespace
+func trimSpace(s string) string {
+	start := 0
+	end := len(s)
+
+	// Trim leading whitespace
+	for start < end && isSpace(s[start]) {
+		start++
+	}
+
+	// Trim trailing whitespace
+	for end > start && isSpace(s[end-1]) {
+		end--
+	}
+
+	return s[start:end]
+}
+
+// isSpace checks if a byte is whitespace
+func isSpace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }

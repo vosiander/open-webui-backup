@@ -1,6 +1,6 @@
 # open-webui-backup
 
-Secure backup and restore tool for Open WebUI with mandatory age encryption.
+Secure backup and restore tool for Open WebUI with mandatory age encryption..
 
 ## Features
 

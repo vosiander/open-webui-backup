@@ -162,7 +162,7 @@ func TestConnection(config *DatabaseConfig) error {
 	return nil
 }
 
-// CreateDump creates a database dump using pg_dump
+// CreateDump creates a database dump using pg_dump (or Docker)
 func CreateDump(config *DatabaseConfig, options *DumpOptions) ([]byte, error) {
 	if config == nil {
 		return nil, fmt.Errorf("database config is nil")
@@ -174,6 +174,11 @@ func CreateDump(config *DatabaseConfig, options *DumpOptions) ([]byte, error) {
 			NoOwner:      true,
 			NoPrivileges: true,
 		}
+	}
+
+	// Check if Docker mode should be used
+	if UseDockerPgTools() {
+		return createDumpWithDocker(config, options)
 	}
 
 	logrus.Infof("Creating database dump for '%s'...", config.Database)
@@ -225,7 +230,25 @@ func CreateDump(config *DatabaseConfig, options *DumpOptions) ([]byte, error) {
 
 	// Run the command
 	if err := cmd.Run(); err != nil {
+		// Check for version mismatch error
 		stderrStr := stderr.String()
+		if strings.Contains(stderrStr, "server version mismatch") {
+			return nil, fmt.Errorf(`pg_dump failed due to version mismatch.
+
+Error: %s
+
+Solutions:
+1. Enable Docker mode: export USE_DOCKER_PG_TOOLS=true
+   (This will automatically use a matching PostgreSQL version via Docker)
+
+2. Upgrade your local PostgreSQL client tools to match the server version
+
+3. Set PG_DUMP_BINARY to point to a compatible pg_dump version:
+   export PG_DUMP_BINARY=/path/to/compatible/pg_dump
+
+4. Use Docker manually:
+   docker run --rm -e PGPASSWORD=xxx postgres:<version> pg_dump ...`, stderrStr)
+		}
 		return nil, fmt.Errorf("pg_dump failed: %w\nError output: %s", err, stderrStr)
 	}
 
@@ -240,7 +263,123 @@ func CreateDump(config *DatabaseConfig, options *DumpOptions) ([]byte, error) {
 	return dumpData, nil
 }
 
-// RestoreDump restores a database dump using pg_restore or psql
+// createDumpWithDocker creates a database dump using Docker with matching PostgreSQL version
+func createDumpWithDocker(config *DatabaseConfig, options *DumpOptions) ([]byte, error) {
+	// Check if Docker is available
+	if !IsDockerAvailable() {
+		return nil, fmt.Errorf("Docker is not available. Install Docker or set USE_DOCKER_PG_TOOLS=false")
+	}
+
+	// Get server version to determine Docker image
+	serverVersion, err := GetPostgresVersion(config)
+	if err != nil {
+		logrus.Warnf("Failed to detect server version, using 'latest': %v", err)
+		serverVersion = "latest"
+	}
+
+	majorVersion := ExtractMajorVersion(serverVersion)
+	dockerImage := fmt.Sprintf("postgres:%s", majorVersion)
+
+	// Resolve host for Docker (localhost -> host.docker.internal on Mac/Windows)
+	dockerHost := ResolveDockerHost(config.Host)
+
+	logrus.Infof("Creating database dump for '%s' using Docker image %s...", config.Database, dockerImage)
+	if dockerHost != config.Host {
+		logrus.Debugf("Resolved host '%s' to '%s' for Docker", config.Host, dockerHost)
+	}
+
+	// Build pg_dump arguments
+	pgDumpArgs := []string{
+		"-h", dockerHost,
+		"-p", strconv.Itoa(config.Port),
+		"-U", config.User,
+		"-d", config.Database,
+	}
+
+	// Add format option
+	if options.Format == "custom" {
+		pgDumpArgs = append(pgDumpArgs, "-Fc")
+		if options.Compress > 0 {
+			pgDumpArgs = append(pgDumpArgs, fmt.Sprintf("-Z%d", options.Compress))
+		}
+	} else {
+		pgDumpArgs = append(pgDumpArgs, "-Fp")
+	}
+
+	// Add other options
+	if options.NoOwner {
+		pgDumpArgs = append(pgDumpArgs, "--no-owner")
+	}
+	if options.NoPrivileges {
+		pgDumpArgs = append(pgDumpArgs, "--no-privileges")
+	}
+	if options.SchemaOnly {
+		pgDumpArgs = append(pgDumpArgs, "--schema-only")
+	}
+	if options.DataOnly {
+		pgDumpArgs = append(pgDumpArgs, "--data-only")
+	}
+	if options.Verbose {
+		pgDumpArgs = append(pgDumpArgs, "-v")
+	}
+
+	// Build Docker command
+	dockerArgs := []string{"run", "--rm"}
+
+	// Add --network=host on Linux when connecting to localhost
+	if NeedsDockerHostNetwork(config.Host) {
+		dockerArgs = append(dockerArgs, "--network=host")
+		logrus.Debug("Using --network=host for Docker (Linux + localhost)")
+	}
+
+	dockerArgs = append(dockerArgs,
+		"-e", fmt.Sprintf("PGPASSWORD=%s", config.Password),
+		dockerImage,
+		"pg_dump",
+	)
+	dockerArgs = append(dockerArgs, pgDumpArgs...)
+
+	// Log the full command if verbose
+	if options.Verbose {
+		// Mask the password in the log
+		maskedArgs := make([]string, len(dockerArgs))
+		copy(maskedArgs, dockerArgs)
+		for i, arg := range maskedArgs {
+			if strings.HasPrefix(arg, "PGPASSWORD=") {
+				maskedArgs[i] = "PGPASSWORD=***"
+			}
+		}
+		logrus.Infof("Executing: docker %s", strings.Join(maskedArgs, " "))
+	}
+
+	cmd := exec.Command("docker", dockerArgs...)
+
+	// Capture stdout and stderr
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	// Run the command
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("Docker pg_dump failed: %w\nError output: %s", err, stderr.String())
+	}
+
+	// Log stderr output based on verbose setting
+	if stderr.Len() > 0 {
+		if options.Verbose {
+			logrus.Infof("pg_dump output: %s", stderr.String())
+		} else {
+			logrus.Debugf("Docker pg_dump output: %s", stderr.String())
+		}
+	}
+
+	dumpData := stdout.Bytes()
+	logrus.Infof("Database dump created successfully via Docker (%d bytes)", len(dumpData))
+
+	return dumpData, nil
+}
+
+// RestoreDump restores a database dump using pg_restore or psql (or Docker)
 func RestoreDump(config *DatabaseConfig, dumpData []byte, options *RestoreOptions) error {
 	if config == nil {
 		return fmt.Errorf("database config is nil")
@@ -257,6 +396,11 @@ func RestoreDump(config *DatabaseConfig, dumpData []byte, options *RestoreOption
 		}
 	}
 
+	// Check if Docker mode should be used
+	if UseDockerPgTools() {
+		return restoreDumpWithDocker(config, dumpData, options)
+	}
+
 	logrus.Infof("Restoring database dump to '%s'...", config.Database)
 
 	// Determine if this is a custom format or plain SQL
@@ -269,6 +413,126 @@ func RestoreDump(config *DatabaseConfig, dumpData []byte, options *RestoreOption
 		// Use psql for plain SQL format
 		return restoreWithPsql(config, dumpData, options)
 	}
+}
+
+// restoreDumpWithDocker restores a database dump using Docker with matching PostgreSQL version
+func restoreDumpWithDocker(config *DatabaseConfig, dumpData []byte, options *RestoreOptions) error {
+	// Check if Docker is available
+	if !IsDockerAvailable() {
+		return fmt.Errorf("Docker is not available. Install Docker or set USE_DOCKER_PG_TOOLS=false")
+	}
+
+	// Get server version to determine Docker image
+	serverVersion, err := GetPostgresVersion(config)
+	if err != nil {
+		logrus.Warnf("Failed to detect server version, using 'latest': %v", err)
+		serverVersion = "latest"
+	}
+
+	majorVersion := ExtractMajorVersion(serverVersion)
+	dockerImage := fmt.Sprintf("postgres:%s", majorVersion)
+
+	// Resolve host for Docker (localhost -> host.docker.internal on Mac/Windows)
+	dockerHost := ResolveDockerHost(config.Host)
+
+	logrus.Infof("Restoring database dump to '%s' using Docker image %s...", config.Database, dockerImage)
+	if dockerHost != config.Host {
+		logrus.Debugf("Resolved host '%s' to '%s' for Docker", config.Host, dockerHost)
+	}
+
+	// Determine if this is a custom format or plain SQL
+	isCustomFormat := len(dumpData) > 5 && string(dumpData[:5]) == "PGDMP"
+
+	var tool string
+	var toolArgs []string
+
+	if isCustomFormat {
+		// Use pg_restore for custom format
+		tool = "pg_restore"
+		toolArgs = []string{
+			"-h", dockerHost,
+			"-p", strconv.Itoa(config.Port),
+			"-U", config.User,
+			"-d", config.Database,
+		}
+		if options.NoOwner {
+			toolArgs = append(toolArgs, "--no-owner")
+		}
+		if options.NoPrivileges {
+			toolArgs = append(toolArgs, "--no-privileges")
+		}
+		if options.Verbose {
+			toolArgs = append(toolArgs, "-v")
+		}
+	} else {
+		// Use psql for plain SQL
+		tool = "psql"
+		toolArgs = []string{
+			"-h", dockerHost,
+			"-p", strconv.Itoa(config.Port),
+			"-U", config.User,
+			"-d", config.Database,
+			"-q",
+		}
+		if options.Verbose {
+			toolArgs = append(toolArgs, "-a")
+		}
+	}
+
+	// Build Docker command
+	dockerArgs := []string{"run", "--rm", "-i"} // Interactive mode for stdin
+
+	// Add --network=host on Linux when connecting to localhost
+	if NeedsDockerHostNetwork(config.Host) {
+		dockerArgs = append(dockerArgs, "--network=host")
+		logrus.Debug("Using --network=host for Docker (Linux + localhost)")
+	}
+
+	dockerArgs = append(dockerArgs,
+		"-e", fmt.Sprintf("PGPASSWORD=%s", config.Password),
+		dockerImage,
+		tool,
+	)
+	dockerArgs = append(dockerArgs, toolArgs...)
+
+	// Log the full command if verbose
+	if options.Verbose {
+		// Mask the password in the log
+		maskedArgs := make([]string, len(dockerArgs))
+		copy(maskedArgs, dockerArgs)
+		for i, arg := range maskedArgs {
+			if strings.HasPrefix(arg, "PGPASSWORD=") {
+				maskedArgs[i] = "PGPASSWORD=***"
+			}
+		}
+		logrus.Infof("Executing: docker %s", strings.Join(maskedArgs, " "))
+	}
+
+	cmd := exec.Command("docker", dockerArgs...)
+
+	// Pipe dump data to stdin
+	cmd.Stdin = bytes.NewReader(dumpData)
+
+	// Capture stderr for logging
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	// Run the command
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("Docker %s failed: %w\nError output: %s", tool, err, stderr.String())
+	}
+
+	// Log stderr output based on verbose setting
+	if stderr.Len() > 0 {
+		if options.Verbose {
+			logrus.Infof("%s output: %s", tool, stderr.String())
+		} else {
+			logrus.Debugf("Docker %s output: %s", tool, stderr.String())
+		}
+	}
+
+	logrus.Info("Database restored successfully via Docker")
+	return nil
 }
 
 // restoreWithPgRestore restores a custom format dump using pg_restore
